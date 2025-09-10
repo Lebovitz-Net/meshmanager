@@ -12,14 +12,10 @@ export default function Nodes({ useDummyData = false }) {
     error,
     loading,
     sendRequest,
-    decodeIncoming,
   } = useTCPNodes();
 
   const refresh = () => {
     sendRequest();
-    setTimeout(() => {
-      decodeIncoming();
-    }, 500);
   };
 
   useEffect(() => {
