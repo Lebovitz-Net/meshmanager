@@ -79,13 +79,15 @@ export default function NodeDetails({
     return debouncedActive && !!node?.id;
   }, [debouncedActive, node?.id]);
 
+  const nodeKey = node.id ?? node.nodeId ?? node.node_id ?? node.ip;
   const { status, send } = useMeshSocketBridge({
-    url: getWSUrl(node.id ?? node.ip),
+    url: nodeKey ? getWSUrl(nodeKey) : undefined,
     binary: false,
-    active: shouldConnect,
+    active: shouldConnect && !!nodeKey,
     idleMs: 5000,
     handlers: nodeDetailsHandlers
   });
+
 
   useNodeSubscription({
     nodeId: node.id,
@@ -115,6 +117,10 @@ export default function NodeDetails({
   const formattedLastHeard = lastHeard
     ? new Date(lastHeard * 1000).toLocaleString()
     : 'Unknown';
+
+    console.log('[NodeDetails] node:', node);
+    console.log('[NodeDetails] longName:', longName, 'shortName:', shortName);
+
 
   return (
     <Box mt={2} p={2} border={1} borderRadius={2} borderColor="grey.300">

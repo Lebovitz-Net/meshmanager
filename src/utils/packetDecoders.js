@@ -1,5 +1,4 @@
-// packetDecoders.js
-
+// utils/packetDecoders.js
 import protobuf from 'protobufjs';
 import protoJson from '../assets/proto.json' with { type: 'json' };
 
@@ -7,14 +6,7 @@ const START1 = 0x94;
 const START2 = 0xc3;
 
 let root;
-let MeshPacket;
-let FromRadio;
-let ToRadio;
-let ServiceEnvelope;
-let NodeInfo;
-let Telemetry;
-let Config;
-let DeviceMetrics;
+let MeshPacket, FromRadio, ToRadio, ServiceEnvelope, NodeInfo, Telemetry, Config, DeviceMetrics;
 
 export async function initProtoTypes() {
   root = protobuf.Root.fromJSON(protoJson);
@@ -28,11 +20,7 @@ export async function initProtoTypes() {
   Config = root.lookupType('meshtastic.Config');
   DeviceMetrics = root.lookupType('meshtastic.DeviceMetrics');
 
-  if (!MeshPacket || !FromRadio) {
-    console.error('[Proto Init] Failed to load MeshPacket or FromRadio');
-  } else {
-    console.log('[Proto Init] Protobuf types initialized');
-  }
+  console.log('[Proto Init] Protobuf types initialized');
 }
 
 export function hasFramingHeader(buffer) {
@@ -48,64 +36,69 @@ function tryDecode(buffer, type, label) {
     console.warn(`[${label}] Decoder not initialized`);
     return null;
   }
-
-  const payload = stripFramingHeader(buffer);
   try {
-    return type.decode(payload);
-  } catch (err) {
-    console.warn(`[${label}] Decode failed:`, err.message);
+    return type.decode(stripFramingHeader(buffer));
+  } catch {
     return null;
   }
 }
 
-export function tryDecodeMeshPacket(buffer) {
-  return tryDecode(buffer, MeshPacket, 'MeshPacket');
+function decodeByPort(portnum, payload) {
+  switch (portnum) {
+    case 67: return { type: 'NodeInfo', decoded: tryDecode(payload, NodeInfo, 'NodeInfo') };
+    case 65: return { type: 'Position', decoded: tryDecode(payload, Telemetry, 'Position') };
+    case 68: return { type: 'Telemetry', decoded: tryDecode(payload, Telemetry, 'Telemetry') };
+    case 69: return { type: 'DeviceMetrics', decoded: tryDecode(payload, DeviceMetrics, 'DeviceMetrics') };
+    default: return null;
+  }
 }
 
-export function tryDecodeFromRadio(buffer) {
-  return tryDecode(buffer, FromRadio, 'FromRadio');
-}
-
-export function tryDecodeToRadio(buffer) {
-  return tryDecode(buffer, ToRadio, 'ToRadio');
-}
-
-export function tryDecodeServiceEnvelope(buffer) {
-  return tryDecode(buffer, ServiceEnvelope, 'ServiceEnvelope');
-}
-
-export function tryDecodeNodeInfo(buffer) {
-  return tryDecode(buffer, NodeInfo, 'NodeInfo');
-}
-
-export function tryDecodeTelemetry(buffer) {
-  return tryDecode(buffer, Telemetry, 'Telemetry');
-}
-
-export function tryDecodeConfig(buffer) {
-  return tryDecode(buffer, Config, 'Config');
-}
-
-export function tryDecodeDeviceMetrics(buffer) {
-  return tryDecode(buffer, DeviceMetrics, 'DeviceMetrics');
-}
-
-export function classifyPacket(buffer) {
-  const decoders = [
-    { fn: tryDecodeMeshPacket, label: 'MeshPacket' },
-    { fn: tryDecodeFromRadio, label: 'FromRadio' },
-    { fn: tryDecodeToRadio, label: 'ToRadio' },
-    { fn: tryDecodeServiceEnvelope, label: 'ServiceEnvelope' },
-    { fn: tryDecodeNodeInfo, label: 'NodeInfo' },
-    { fn: tryDecodeTelemetry, label: 'Telemetry' },
-    { fn: tryDecodeConfig, label: 'Config' },
-    { fn: tryDecodeDeviceMetrics, label: 'DeviceMetrics' },
-  ];
-
-  for (const { fn, label } of decoders) {
-    const result = fn(buffer);
-    if (result) return { type: label, decoded: result };
+export function classifyPacket(buffer, source = 'tcp') {
+  // Try FromRadio first
+  const fr = tryDecode(buffer, FromRadio, 'FromRadio');
+  if (fr?.packet) {
+    const mp = tryDecode(fr.packet, MeshPacket, 'MeshPacket');
+    if (mp?.decoded) {
+      const payloadDecoded = decodeByPort(mp.decoded.portnum, mp.decoded.payload);
+      return {
+        type: payloadDecoded?.type || 'MeshPacket',
+        decoded: payloadDecoded?.decoded || mp.decoded,
+        nodeId: mp.decoded?.from || 'UnknownNode',
+        viaMqtt: Boolean(mp.decoded?.viaMqtt),
+        source
+      };
+    }
   }
 
-  return { type: 'Unknown', raw: buffer };
+  // Try MeshPacket directly
+  const mp = tryDecode(buffer, MeshPacket, 'MeshPacket');
+  if (mp?.decoded) {
+    const payloadDecoded = decodeByPort(mp.decoded.portnum, mp.decoded.payload);
+    return {
+      type: payloadDecoded?.type || 'MeshPacket',
+      decoded: payloadDecoded?.decoded || mp.decoded,
+      nodeId: mp.decoded?.from || 'UnknownNode',
+      viaMqtt: Boolean(mp.decoded?.viaMqtt),
+      source
+    };
+  }
+
+  // Try other top-level types
+  const otherTypes = [
+    { type: 'ToRadio', decoder: ToRadio },
+    { type: 'ServiceEnvelope', decoder: ServiceEnvelope },
+    { type: 'NodeInfo', decoder: NodeInfo },
+    { type: 'Telemetry', decoder: Telemetry },
+    { type: 'Config', decoder: Config },
+    { type: 'DeviceMetrics', decoder: DeviceMetrics }
+  ];
+
+  for (const { type, decoder } of otherTypes) {
+    const decoded = tryDecode(buffer, decoder, type);
+    if (decoded) {
+      return { type, decoded, nodeId: decoded?.from || 'UnknownNode', viaMqtt: false, source };
+    }
+  }
+
+  return { type: 'Unknown', raw: buffer, rawHex: buffer.toString('hex'), length: buffer.length, source };
 }

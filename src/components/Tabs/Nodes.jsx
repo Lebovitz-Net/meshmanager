@@ -67,9 +67,14 @@ export default function Nodes({ useDummyData = false }) {
           Error: {error.message || 'Unknown decoding failure'}
         </Typography>
       )}
-      {nodes.map((node) => {
-        // pick a stable ID for key and toggle matching
-        const stableId = node.node_num ?? node.node_id ?? node.id ?? node.ip;
+      {nodes.map((node, idx) => {
+        const stableId =
+          node.node_num ??
+          node.node_id ??
+          node.nodeId ??
+          node.id ??
+          node.ip ??
+          `node-${idx}`;
         return (
           <NodeDetails
             key={stableId}
@@ -80,6 +85,7 @@ export default function Nodes({ useDummyData = false }) {
           />
         );
       })}
+
     </Box>
   );
 }
