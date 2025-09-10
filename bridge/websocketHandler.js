@@ -4,8 +4,10 @@ import createTCPClient from './tcpClient.js';
 import { currentIPHost, currentIPPort } from '../src/utils/config.js';
 import { randomUUID } from 'crypto';
 import { classifyPacket, stripFramingHeader } from './packetDecoders.js';
-import { processLocalPacket } from './meshBridge.js';
 import { processMqttPacket } from './mqttBridge.js';
+import { processLocalPacket, setActiveSession } from './meshBridge.js';
+
+
 
 const WS_PORT = 8080;
 let activeSession = null;
@@ -25,12 +27,23 @@ export default function startWebSocketHandler() {
 
       onFrame: (buffer) => {
         const packet = classifyPacket(stripFramingHeader(buffer), 'tcp');
+
         if (packet.type === 'Unknown') {
           console.warn('[WSHandler] Unknown packet');
           return;
         }
-        packet.viaMqtt ? processMqttPacket(packet) : processLocalPacket(packet);
+
+        // TEMP: Only forward NodeInfo packets, drop MQTT entirely
+        if (packet.viaMqtt || packet.type !== 'NodeInfo') {
+          return;
+        }
+
+        if (packet.viaMqtt) {
+          return; // drop MQTT entirely
+        }
+        processLocalPacket(packet);
       },
+
 
       onError: (err) => {
         console.error(`❌ TCP error:`, err.message);
@@ -57,6 +70,8 @@ export default function startWebSocketHandler() {
     });
 
     activeSession = { ws, tcp };
+    setActiveSession(activeSession);
+
 
     ws.on('message', (msg) => {
       tcp.write(msg);

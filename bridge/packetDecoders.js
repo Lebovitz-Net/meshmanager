@@ -53,52 +53,97 @@ function decodeByPort(portnum, payload) {
   }
 }
 
+function classifyMeshPacket(mp, source) {
+  // mp here is already a decoded MeshPacket protobuf object
+  const nodeId = mp.from || 'UnknownNode';
+  const viaMqtt = !!mp.viaMqtt;
+
+  let type = 'MeshPacket';
+  let decodedPayload = mp.decoded || {};
+
+  // If we have a decoded payload with a portnum, try to map it
+  if (mp.decoded?.portnum !== undefined && mp.decoded?.payload) {
+    const portnum = mp.decoded.portnum;
+    const payloadDecoded = decodeByPort(portnum, mp.decoded.payload);
+
+    if (payloadDecoded?.type) {
+      type = payloadDecoded.type;
+    }
+    if (payloadDecoded?.decoded) {
+      decodedPayload = payloadDecoded.decoded;
+    }
+  }
+
+  return {
+    type,
+    decoded: decodedPayload,
+    nodeId,
+    viaMqtt,
+    source
+  };
+}
+
 export function classifyPacket(buffer, source = 'tcp') {
-  // Try FromRadio first
-  const fr = tryDecode(buffer, FromRadio, 'FromRadio');
-  if (fr?.packet) {
-    const mp = tryDecode(fr.packet, MeshPacket, 'MeshPacket');
-    if (mp?.decoded) {
-      const payloadDecoded = decodeByPort(mp.decoded.portnum, mp.decoded.payload);
-      return {
-        type: payloadDecoded?.type || 'MeshPacket',
-        decoded: payloadDecoded?.decoded || mp.decoded,
-        nodeId: mp.decoded?.from || 'UnknownNode',
-        viaMqtt: Boolean(mp.decoded?.viaMqtt),
-        source
-      };
+  let current = buffer;
+  let lastType = 'Unknown';
+  let depth = 0;
+
+  while (depth < 5) { // safety limit to avoid infinite loops
+    depth++;
+
+    // Try known wrapper types first
+    const se = tryDecode(current, ServiceEnvelope, 'ServiceEnvelope');
+    if (se?.packet) {
+      lastType = 'ServiceEnvelope';
+      current = se.packet;
+      continue; // unwrap again
     }
-  }
 
-  // Try MeshPacket directly
-  const mp = tryDecode(buffer, MeshPacket, 'MeshPacket');
-  if (mp?.decoded) {
-    const payloadDecoded = decodeByPort(mp.decoded.portnum, mp.decoded.payload);
-    return {
-      type: payloadDecoded?.type || 'MeshPacket',
-      decoded: payloadDecoded?.decoded || mp.decoded,
-      nodeId: mp.decoded?.from || 'UnknownNode',
-      viaMqtt: Boolean(mp.decoded?.viaMqtt),
-      source
-    };
-  }
-
-  // Try other top-level types
-  const otherTypes = [
-    { type: 'ToRadio', decoder: ToRadio },
-    { type: 'ServiceEnvelope', decoder: ServiceEnvelope },
-    { type: 'NodeInfo', decoder: NodeInfo },
-    { type: 'Telemetry', decoder: Telemetry },
-    { type: 'Config', decoder: Config },
-    { type: 'DeviceMetrics', decoder: DeviceMetrics }
-  ];
-
-  for (const { type, decoder } of otherTypes) {
-    const decoded = tryDecode(buffer, decoder, type);
-    if (decoded) {
-      return { type, decoded, nodeId: decoded?.from || 'UnknownNode', viaMqtt: false, source };
+    const fr = tryDecode(current, FromRadio, 'FromRadio');
+    if (fr?.packet) {
+      lastType = 'FromRadio';
+      current = fr.packet;
+      continue; // unwrap again
     }
+
+    // Try MeshPacket
+    const mp = tryDecode(current, MeshPacket, 'MeshPacket');
+    if (mp) {
+      return classifyMeshPacket(mp, source);
+    }
+
+    // Try other top-level types (non-wrappers)
+    const otherTypes = [
+      { type: 'NodeInfo', decoder: NodeInfo },
+      { type: 'Telemetry', decoder: Telemetry },
+      { type: 'Config', decoder: Config },
+      { type: 'DeviceMetrics', decoder: DeviceMetrics },
+      { type: 'ToRadio', decoder: ToRadio }
+    ];
+
+    for (const { type, decoder } of otherTypes) {
+      const decoded = tryDecode(current, decoder, type);
+      if (decoded) {
+        return {
+          type,
+          decoded,
+          nodeId: decoded?.from || 'UnknownNode',
+          viaMqtt: false,
+          source
+        };
+      }
+    }
+
+    // If nothing matched, break
+    break;
   }
 
-  return { type: 'Unknown', raw: buffer, rawHex: buffer.toString('hex'), length: buffer.length, source };
+  // If we get here, we couldn't classify
+  return {
+    type: lastType || 'Unknown',
+    raw: current,
+    rawHex: Buffer.isBuffer(current) ? current.toString('hex') : null,
+    length: Buffer.isBuffer(current) ? current.length : null,
+    source
+  };
 }

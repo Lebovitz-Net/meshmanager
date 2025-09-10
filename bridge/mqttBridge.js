@@ -25,7 +25,7 @@ client.on('message', (topic, message) => {
   const packet = classifyPacket(message, 'mqtt');
 
   if (packet.type === 'Unknown') {
-    console.warn('[MQTT] Unknown or undecodable packet from topic:', topic);
+    // console.warn('[MQTT] Unknown or undecodable packet from topic:', topic);
     return;
   }
 
