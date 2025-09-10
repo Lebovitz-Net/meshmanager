@@ -1,0 +1,122 @@
+// src/hooks/useMeshBridge.js
+import { useRef } from 'react';
+import { encodeProtobuf, decodeProtobuf } from '@/utils/protobufsUtils';
+
+export const START1 = 0x94;
+export const START2 = 0xC2;
+
+let socketCounter = 0;
+
+export function useMeshBridge(url = 'ws://localhost:8080') {
+  const socketRef = useRef(null);
+  const packetBufferRef = useRef([]);
+  const socketIdRef = useRef(null);
+
+  const connect = () => {
+    return new Promise((resolve, reject) => {
+      const socket = socketRef.current;
+
+      // Idempotent guard: if already open, resolve immediately
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        if (process.env.NODE_ENV === 'production') {
+          console.warn('⚠️ WebSocket already connected');
+        }
+        return resolve();
+      }
+
+      // If connecting, wait for it to open
+      if (socket && socket.readyState === WebSocket.CONNECTING) {
+        socket.addEventListener('open', () => resolve(), { once: true });
+        socket.addEventListener('error', (err) => reject(err), { once: true });
+        return;
+      }
+
+      // Otherwise, create a new socket
+      const id = ++socketCounter;
+      socketIdRef.current = id;
+
+      const newSocket = new WebSocket(url);
+      newSocket.binaryType = 'arraybuffer';
+      socketRef.current = newSocket;
+
+      console.log(`🔌 WS #${id} created`);
+
+      newSocket.onopen = () => {
+        console.log(`✅ WS #${id} connected`);
+        resolve();
+      };
+
+      newSocket.onmessage = (event) => {
+        const buffer = new Uint8Array(event.data);
+        if (buffer.length >= 2 && buffer[0] === START1 && buffer[1] === START2) {
+          try {
+            const decoded = decodeProtobuf(buffer.subarray(2));
+            packetBufferRef.current.push(decoded);
+            console.log(`📥 WS #${id} decoded:`, decoded);
+          } catch (err) {
+            console.error(`❌ WS #${id} decode failed:`, err);
+          }
+        } else {
+          console.warn(`⚠️ WS #${id} unexpected frame start:`, buffer);
+        }
+      };
+
+      newSocket.onerror = (err) => {
+        console.error(`❌ WS #${id} error:`, err);
+        reject(err);
+      };
+
+      newSocket.onclose = () => console.log(`🔌 WS #${id} closed`);
+    });
+  };
+
+  /**
+   * Dual‑mode send:
+   * - If passed a protobuf message instance (has $type), encode directly.
+   * - If passed a type object (has verify), verify + create + encode.
+   */
+  const send = (protobufArg, payloadOrDebug, maybeDebug) => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      console.warn('⚠️ WebSocket not connected');
+      return;
+    }
+
+    let debug = false;
+    let body;
+
+    try {
+      if (protobufArg && typeof protobufArg === 'object' && protobufArg.$type) {
+        // Instance mode
+        debug = Boolean(payloadOrDebug);
+        body = protobufArg.$type.encode(protobufArg).finish();
+      } else if (protobufArg && typeof protobufArg.verify === 'function') {
+        // Type + payload mode
+        const payload = payloadOrDebug || {};
+        debug = Boolean(maybeDebug);
+        const err = protobufArg.verify(payload);
+        if (err) throw new Error(err);
+        const message = protobufArg.create(payload);
+        body = protobufArg.encode(message).finish();
+      } else {
+        throw new Error('send() expected a protobuf message instance or type');
+      }
+
+      // Frame with START1/START2
+      const fullMessage = new Uint8Array(2 + body.length);
+      fullMessage[0] = START1;
+      fullMessage[1] = START2;
+      fullMessage.set(body, 2);
+
+      if (debug) console.log('🧪 Full framed message:', fullMessage);
+      socket.send(fullMessage);
+      console.log('📤 Sent framed message');
+    } catch (err) {
+      console.error('❌ Framing failed:', err);
+    }
+  };
+
+  const getPackets = () => [...packetBufferRef.current];
+
+  return { connect, send, getPackets };
+}

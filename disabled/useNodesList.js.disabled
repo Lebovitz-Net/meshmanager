@@ -1,0 +1,31 @@
+import { useEffect, useState } from 'react';
+
+export default function useNodeList(endpoint = '/api/v1/nodes', useDummyData = false) {
+  const [nodes, setNodes] = useState([]);
+  const [status, setStatus] = useState('idle');
+
+  useEffect(() => {
+    if (useDummyData) {
+      setNodes([
+        { name: 'DummyNode1', ip: '10.0.0.1', channel: 'A' },
+        { name: 'DummyNode2', ip: '10.0.0.2', channel: 'B' },
+      ]);
+      setStatus('dummy');
+      return;
+    }
+
+    setStatus('loading');
+    fetch(endpoint)
+      .then((res) => res.json())
+      .then((data) => {
+        setNodes(data.nodes || []);
+        setStatus('success');
+      })
+      .catch((err) => {
+        console.error('Failed to fetch node list:', err);
+        setStatus('error');
+      });
+  }, [endpoint, useDummyData]);
+
+  return { nodes, status };
+}

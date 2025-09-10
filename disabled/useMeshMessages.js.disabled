@@ -1,0 +1,79 @@
+export default function useMeshWebSocket(wsUrl, useDummyData = false) {
+  const [messages, setMessages] = useState([]);
+  const [status, setStatus] = useState('disconnected');
+
+  useEffect(() => {
+    if (useDummyData) {
+      setStatus('simulated');
+      const interval = setInterval(() => {
+        setMessages(prev => [
+          ...prev,
+          {
+            position: {
+              latitude: 42.345,
+              longitude: -71.122,
+              speed: Math.random() * 5,
+              heading: Math.floor(Math.random() * 360),
+              timestamp: Date.now(),
+            },
+          },
+        ]);
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+
+    if (!wsUrl) return;
+
+    const ws = new WebSocket(wsUrl);
+    setStatus('connecting');
+
+    ws.onopen = () => setStatus('connected');
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        setMessages(prev => [...prev, data]);
+      } catch (err) {
+        console.warn('Invalid WS message:', event.data);
+      }
+    };
+    ws.onerror = () => setStatus('error');
+    ws.onclose = () => setStatus('disconnected');
+
+    return () => ws.close();
+  }, [wsUrl, useDummyData]);
+
+  return { messages, status };
+}
+
+// import { useMemo } from 'react';
+// import useMeshWebSocket from '@/hooks/useMeshWebSocket';
+
+// export default function useMeshMessages({ url, channelId = null, dryRun = false }) {
+//   const { messages, status, sendMesh } = useMeshWebSocket({ url, dryRun });
+
+//   const parsedMessages = useMemo(() => {
+//     if (!messages || dryRun) return [];
+
+//     return messages
+//       .map((msg) => {
+//         try {
+//           const { type, payload, channel } = msg;
+//           return {
+//             type,
+//             payload,
+//             channelId: channel?.id || null,
+//             raw: msg,
+//           };
+//         } catch {
+//           return null;
+//         }
+//       })
+//       .filter((msg) => msg !== null && (!channelId || msg.channelId === channelId));
+//   }, [messages, channelId, dryRun]);
+
+//   return {
+//     messages: parsedMessages,
+//     status,
+//     sendMessage: sendMesh,
+//   };
+// }
