@@ -1,6 +1,6 @@
 // utils/packetDecoders.js
 import protobuf from 'protobufjs';
-import protoJson from '../assets/proto.json' with { type: 'json' };
+import protoJson from '../src/assets/proto.json' with { type: 'json' };
 
 const START1 = 0x94;
 const START2 = 0xc3;

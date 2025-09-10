@@ -3,7 +3,7 @@ import createWSServer from './wsServer.js';
 import createTCPClient from './tcpClient.js';
 import { currentIPHost, currentIPPort } from '../src/utils/config.js';
 import { randomUUID } from 'crypto';
-import { classifyPacket, stripFramingHeader } from '../src/utils/packetDecoders.js';
+import { classifyPacket, stripFramingHeader } from './packetDecoders.js';
 import { processLocalPacket } from './meshBridge.js';
 import { processMqttPacket } from './mqttBridge.js';
 

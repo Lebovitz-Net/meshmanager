@@ -1,6 +1,6 @@
 // bridge/mqttBridge.js
 import mqtt from 'mqtt';
-import { classifyPacket } from '../src/utils/packetDecoders.js';
+import { classifyPacket } from './packetDecoders.js';
 import { processLocalPacket } from './meshBridge.js';
 
 // Configure your broker URL and options
