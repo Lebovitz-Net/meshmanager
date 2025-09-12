@@ -5,7 +5,6 @@ import { useNodeSubscription } from '@/hooks/useNodeSubscription.js';
 import { getWSUrl } from '@/utils/config';
 import { handlePacket } from '@/utils/handlePacket.js';
 
-
 export default function NodeDetails({
   node,
   expanded = false,
@@ -69,11 +68,11 @@ export default function NodeDetails({
   }, []);
 
   const nodeDetailsHandlers = useMemo(() => ({
-      onOpen: handleOpen,
-      onMessage: handleMessage,
-      onError: handleError,
-      onClose: handleClose
-  }), []);
+    onOpen: handleOpen,
+    onMessage: handleMessage,
+    onError: handleError,
+    onClose: handleClose
+  }), [handleOpen, handleMessage, handleError, handleClose]);
 
   const shouldConnect = useMemo(() => {
     return debouncedActive && !!node?.id;
@@ -88,7 +87,6 @@ export default function NodeDetails({
     handlers: nodeDetailsHandlers
   });
 
-
   useNodeSubscription({
     nodeId: node.id,
     active: shouldConnect,
@@ -97,11 +95,21 @@ export default function NodeDetails({
     onPacket: packetHandler
   });
 
-
   const latest = messages.length > 0 ? messages[messages.length - 1] : {};
+
+  // 🔹 Safe multi-path lookup for names
+  const longName =
+    node.longName ??
+    node.payload?.longName ??
+    node.decoded?.user?.longName ??
+    '';
+  const shortName =
+    node.shortName ??
+    node.payload?.shortName ??
+    node.decoded?.user?.shortName ??
+    '';
+
   const {
-    longName,
-    shortName,
     id,
     channel,
     battery,
@@ -118,9 +126,8 @@ export default function NodeDetails({
     ? new Date(lastHeard * 1000).toLocaleString()
     : 'Unknown';
 
-    console.log('[NodeDetails] node:', node);
-    console.log('[NodeDetails] longName:', longName, 'shortName:', shortName);
-
+  console.log('[NodeDetails] node:', node);
+  console.log('[NodeDetails] resolved longName:', longName, 'shortName:', shortName);
 
   return (
     <Box mt={2} p={2} border={1} borderRadius={2} borderColor="grey.300">

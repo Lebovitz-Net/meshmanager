@@ -35,7 +35,7 @@ export default function createTCPClient(host, port, handlers = {}) {
       const totalLength = 4 + frameLength;
 
       if (frameLength < 1 || frameLength > 4096 || buffer.length < totalLength) {
-        console.debug("[TCP] rejecting frame len", frameLength);
+        console.debug("[TCP] rejecting frame len", frameLength, buffer.length);
         break;
       }
 

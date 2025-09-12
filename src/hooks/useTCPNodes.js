@@ -4,9 +4,7 @@ import { useMeshSocketBridge } from '@/hooks/useMeshSocketBridge.js';
 import { debugLogger } from '@/utils/config.js';
 
 const WS_URL = import.meta?.env?.VITE_TCP_BRIDGE_URL || 'ws://localhost:8080';
-
-// Retry settings
-const TIMEOUT_MS = 3000; // 3 seconds before retry
+const TIMEOUT_MS = 3000;
 const MAX_RETRIES = 3;
 
 export default function useTCPNodes() {
@@ -15,7 +13,6 @@ export default function useTCPNodes() {
   const [error, setError] = useState(null);
   const [configComplete, setConfigComplete] = useState(false);
 
-  // Retry tracking
   const retriesRef = useRef(0);
   const timeoutRef = useRef(null);
   const waitingForResponseRef = useRef(false);
@@ -37,7 +34,6 @@ export default function useTCPNodes() {
 
       const { nodeId, type, payload } = packet;
 
-      // Got a valid packet — stop retry cycle
       waitingForResponseRef.current = false;
       clearRetryTimer();
       retriesRef.current = 0;
@@ -48,11 +44,18 @@ export default function useTCPNodes() {
         console.log('[useTCPNodes] configCompleteId received');
       }
 
+      // Promote longName/shortName to top-level for UI
+      const promoted = {
+        longName: payload.longName ?? payload?.decoded?.user?.longName ?? '',
+        shortName: payload.shortName ?? payload?.decoded?.user?.shortName ?? ''
+      };
+
       setNodes(prev => upsertNode(prev, {
-        id: payload.nodeId ?? payload.node_id ?? payload.num ?? payload.id,
-        ...payload,
-        nodeId,
-        packetType: type
+        id: payload.nodeId ?? payload.node_id ?? payload.num ?? payload.id ?? nodeId,
+        nodeId, // always keep backend nodeId
+        packetType: type,
+        ...payload, // spread payload fields
+        ...promoted  // ensure names are top-level
       }));
 
     } catch (e) {
@@ -75,23 +78,19 @@ export default function useTCPNodes() {
     });
   }, []);
 
-  const handlers = useMemo(
-    () => ({
-      onOpen: handleOpen,
-      onMessage: handleMessage,
-      onError: handleError,
-      onClose: handleClose
-    }),
-    [handleOpen, handleMessage, handleError, handleClose]
-  );
+  const handlers = useMemo(() => ({
+    onOpen: handleOpen,
+    onMessage: handleMessage,
+    onError: handleError,
+    onClose: handleClose
+  }), [handleOpen, handleMessage, handleError, handleClose]);
 
   const { status, send } = useMeshSocketBridge({
     url: WS_URL,
-    binary: false, // now expecting JSON
+    binary: false,
     handlers
   });
 
-  // Public sendRequest now includes retry logic internally
   const sendRequest = useCallback(() => {
     setError(null);
     setLoading(true);
@@ -106,21 +105,15 @@ export default function useTCPNodes() {
 
     try {
       const frame = buildWantConfigIDFrame();
-      console.log('Sending frame:', frame);
       send(frame);
-      console.log('[useTCPNodes] Request sent');
-
       waitingForResponseRef.current = true;
 
-      // Schedule retry if no response
       clearRetryTimer();
       timeoutRef.current = setTimeout(() => {
         if (waitingForResponseRef.current && retriesRef.current < MAX_RETRIES) {
           retriesRef.current += 1;
-          console.warn(
-            `[useTCPNodes] No response, retrying (${retriesRef.current}/${MAX_RETRIES})`
-          );
-          sendRequest(); // recursive retry
+          console.warn(`[useTCPNodes] No response, retrying (${retriesRef.current}/${MAX_RETRIES})`);
+          sendRequest();
         } else if (retriesRef.current >= MAX_RETRIES) {
           console.error('[useTCPNodes] Max retries reached, giving up');
           setLoading(false);
@@ -142,23 +135,14 @@ export default function useTCPNodes() {
     return () => clearRetryTimer();
   }, [status, configComplete, sendRequest, clearRetryTimer]);
 
-  return {
-    nodes,
-    error,
-    loading,
-    sendRequest // same name, now with retry baked in
-  };
+  return { nodes, error, loading, sendRequest };
 }
-
-/* ---------- utils ---------- */
 
 function upsertNode(prev, nodeObj) {
   const key = nodeObj?.num ?? nodeObj?.nodeId ?? nodeObj?.id;
   if (key == null) return prev;
 
-  const i = prev.findIndex(
-    (n) => (n?.num ?? n?.nodeId ?? n?.id) === key
-  );
+  const i = prev.findIndex(n => (n?.num ?? n?.nodeId ?? n?.id) === key);
   if (i === -1) return [...prev, nodeObj];
 
   const copy = prev.slice();

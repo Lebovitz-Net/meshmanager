@@ -1,13 +1,9 @@
-// bridge/websocketHandler.js
 import createWSServer from './wsServer.js';
 import createTCPClient from './tcpClient.js';
 import { currentIPHost, currentIPPort } from '../src/utils/config.js';
 import { randomUUID } from 'crypto';
-import { classifyPacket, stripFramingHeader } from './packetDecoders.js';
-import { processMqttPacket } from './mqttBridge.js';
+import { decodeAndNormalize } from './packetDecoders.js';
 import { processLocalPacket, setActiveSession } from './meshBridge.js';
-
-
 
 const WS_PORT = 8080;
 let activeSession = null;
@@ -26,27 +22,13 @@ export default function startWebSocketHandler() {
       onConnect: () => console.log(`✅ TCP connected for WS ${ws.id}`),
 
       onFrame: (buffer) => {
-        const packet = classifyPacket(stripFramingHeader(buffer), 'tcp');
-
-        if (packet.type === 'Unknown') {
-          console.warn('[WSHandler] Unknown packet');
-          return;
-        }
-
-        // TEMP: Only forward NodeInfo packets, drop MQTT entirely
-        if (packet.viaMqtt || packet.type !== 'NodeInfo') {
-          return;
-        }
-
-        if (packet.viaMqtt) {
-          return; // drop MQTT entirely
-        }
+        const packet = decodeAndNormalize(buffer, 'tcp');
+        if (!packet || packet.type === 'Unknown') return;
         processLocalPacket(packet);
       },
 
-
       onError: (err) => {
-        console.error(`❌ TCP error:`, err.message);
+        console.error('❌ TCP error:', err.message);
         ws.close(1011, 'TCP error');
         activeSession = null;
       },
@@ -61,7 +43,7 @@ export default function startWebSocketHandler() {
         activeSession = null;
       },
 
-      onDrain: () => console.log(`💧 TCP write buffer drained`),
+      onDrain: () => console.log('💧 TCP write buffer drained'),
 
       onEnd: () => {
         ws.close(1000, 'TCP remote end');
@@ -71,7 +53,6 @@ export default function startWebSocketHandler() {
 
     activeSession = { ws, tcp };
     setActiveSession(activeSession);
-
 
     ws.on('message', (msg) => {
       tcp.write(msg);
