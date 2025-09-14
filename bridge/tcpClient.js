@@ -61,6 +61,7 @@ export default function createTCPClient(host, port, handlers = {}) {
   return {
     write: (data) => {
       const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      console.log(`[TCP] SEND ${buf.length} bytes type ${Buffer.isBuffer(data)}`, buf);
       socket.write(buf);
     },
     end: () => socket.end(),

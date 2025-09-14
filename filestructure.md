@@ -1,8 +1,13 @@
 ﻿# Project File Structure
 
 │—— bridge
+│  │—— bufferUtils.js
+│  │—— main.js
 │  │—— meshBridge.js
+│  │—— mqttBridge.js
+│  │—— packetDecoders.js
 │  │—— tcpClient.js
+│  │—— websocketHandler.js
 │  ╵—— wsServer.js
 │—— disabled
 │  │—— useMeshBridge.js.disabled
@@ -175,7 +180,12 @@
 │  │  │  ╵—— TestTab.jsx
 │  │—— hooks
 │  │  │—— diagnostics.js
+│  │  │—— useBridgeLifecycle.js
+│  │  │—— useFlowControl.js
+│  │  │—— useMeshLifeCycle.js
 │  │  │—— useMeshSocketBridge.js
+│  │  │—— useNodeSubscription.js
+│  │  │—— useSocketInterface.js
 │  │  ╵—— useTCPNodes.js
 │  │—— pages
 │  │  │—— ContactsPage.jsx
@@ -186,13 +196,19 @@
 │  │  ╵—— NotFoundPage.jsx
 │  │—— utils
 │  │  │—— config.js
+│  │  │—— decodeFrame.js
 │  │  │—— decodeNodesResponse.js
+│  │  │—— decodePacket.js
+│  │  │—— handlePacket.js
 │  │  │—— mockFirmwareData.js
+│  │  │—— nodeEvents.js
 │  │  │—— protobufsUtils.js
 │  │  │—— protoDescriptor.js
 │  │  │—— protoHelpers.js
+│  │  │—— protoValidate.js
 │  │  │—— safeDecodeMeshPacket.js
-│  │  ╵—— TCPMessage.js
+│  │  │—— TCPMessage.js
+│  │  ╵—— waitForSocketReady.js
 │  │—— validators
 │  │  ╵—— adminMessageLogger.js
 │  │—— App.css
@@ -209,14 +225,21 @@
 │—— .env
 │—— .env.local
 │—— .env.production
+│—— .gitattributes
 │—— .gitignore
 │—— config.yaml
 │—— filestructure.md
 │—— filestructure.ps1
+│—— foo
+│—— implmenting-ack.md
 │—— index.html
+│—— meshmanager.code-workspace
+│—— oldtpnodes.js.txt
+│—— olduseMeshSocketBridge.js.txt
 │—— package-lock.json
 │—— package.json
 │—— README.md
 │—— rewrite-imports.py
+│—— tagging.md
 │—— vite.config.js
 ╵—— vite.config.js.new

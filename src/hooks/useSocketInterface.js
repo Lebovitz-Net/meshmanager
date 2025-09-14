@@ -1,62 +1,102 @@
-import { useRef } from 'react';
-import { debugLogger } from '@/utils/config.js';
+import { useRef, useState, useEffect } from 'react';
+import { addListener, removeListener, emit } from '@/utils/eventUtils';
 
-export function useSocketInterface({ url, binary = true }) {
+export function useSocketInterface({ url, binary = false, active }) {
+
   const socketRef = useRef(null);
-  const listenersRef = useRef(new Set());
+  const [status, setStatus] = useState('idle'); // 'idle' | 'connecting' | 'open' | 'error' | 'closed'
+
+  // Tagging + history tracking
+  const connectionCounterRef = useRef(0);
+  const currentTagRef = useRef(null);
+  const wasOpenedRef = useRef(false);
+
+  const updateStatus = (next) => {
+    setStatus(next);
+  };
 
   const connect = () => {
     if (socketRef.current) return;
+
+    const tag = ++connectionCounterRef.current;
+    currentTagRef.current = tag;
+    wasOpenedRef.current = false;
+    updateStatus('connecting');
+
     const ws = new WebSocket(url);
     ws.binaryType = binary ? 'arraybuffer' : 'blob';
 
-    ws.onopen = () => console.log('[SocketInterface] Connected');
-    ws.onclose = () => console.log('[SocketInterface] Closed');
-    ws.onerror = (e) => {
-        console.warn('[useSocketInterface] ws.onerror triggered:', e);
-
-        const errorInfo = {
-            type: e?.type || 'error',
-            message: 'WebSocket error occurred',
-            raw: e
-        };
-
-        console.log('[useSocketInterface] Error listeners count:', listenersRef.current.size);
-        listenersRef.current.forEach((fn, i) => {
-            console.log(`[useSocketInterface] Invoking listener ${i}:`, fn.name || 'anonymous');
-            fn(errorInfo);
-        });
+    ws.onopen = () => {
+      console.log(`[TAG ${tag}] OPEN`);
+      socketRef.current = ws;
+      wasOpenedRef.current = true;
+      updateStatus('open');
+      emit('socket', 'open', { type: 'open' });
     };
+
     ws.onmessage = (e) => {
-        const data = binary ? new Uint8Array(e.data) : e.data;
-        listenersRef.current.forEach((fn) => fn(data));
+      const data = binary ? new Uint8Array(e.data) : e.data;
+      emit('socket', 'message', data);
     };
 
-    socketRef.current = ws;
+    ws.onerror = (e) => {
+      console.error(`[TAG ${tag}] ERROR`, e);
+      updateStatus('error');
+      emit('socket', 'error', {
+        type: e?.type || 'error',
+        message: 'WebSocket error occurred',
+        raw: e
+      });
+    };
+
+    ws.onclose = (e) => {
+      console.log(`[TAG ${tag}] CLOSE code=${e?.code} reason=${e?.reason} wasClean=${e?.wasClean}`);
+      updateStatus('closed');
+      emit('socket', 'close', {
+        type: 'close',
+        code: e?.code,
+        reason: e?.reason
+      });
+    };
   };
 
   const send = (data) => {
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(data);
+    const ws = socketRef.current;
+    const ready = ws?.readyState;
+    const tag = currentTagRef.current;
+
+    console.log(`[TAG ${tag}] SEND ATTEMPT`, {
+      ready,
+      wasOpened: wasOpenedRef.current,
+      status
+    });
+
+    if (ready === WebSocket.OPEN) {
+      const payload = data;
+      console.log(`[TAG ${tag}] SEND`, payload);
+      ws.send(payload);
+    } else {
+      console.warn(
+        `[TAG ${tag}] Socket not open, send skipped — ${wasOpenedRef.current ? 'was open earlier' : 'never opened'}`
+      );
     }
   };
 
   const close = () => {
-    socketRef.current?.close();
-    socketRef.current = null;
+    const tag = currentTagRef.current;
+    if (socketRef.current) {
+      console.log(`[TAG ${tag}] MANUAL CLOSE CALLED`);
+      socketRef.current.close();
+      socketRef.current = null;
+      updateStatus('closed');
+    }
   };
 
-  const addListener = (fn) => {
-    const label =
-      fn.name ||
-      fn.displayName ||
-      (fn.constructor?.name === 'Function' ? 'anonymous' : fn.constructor?.name);
-      if (listenersRef.current.size === 0) {
-        listenersRef.current.clear;
-        listenersRef.current.add(fn);
-      };
-  };
-  const removeListener = (fn) => listenersRef.current.delete(fn);
+  return {
+    connect,
+    close,
+    send,
 
-  return { connect, send, close, addListener, removeListener };
+    status
+  };
 }

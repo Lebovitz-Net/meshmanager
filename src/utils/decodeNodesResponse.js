@@ -1,7 +1,7 @@
-// src/hooks/decodeNodesResponse.js
 import { getMessageType } from '@/utils/protoDescriptor';
 
-export default function decodeNodesResponse(buffers) {
+export function decodeNodeInfoPackets(buffers) {
+
   const MeshPacket = getMessageType('meshtastic.MeshPacket');
 
   if (!MeshPacket) {

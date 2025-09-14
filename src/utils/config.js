@@ -34,8 +34,7 @@ export function getWSUrl(input) {
   }
 
   // Unexpected format—fallback to default host
-  console.warn("⚠️ Unrecognized WebSocket input:", input);
-  return `ws://${currentWsUrl}/`;
+  return `${currentWsUrl}`;
 }
 
 export const debugLogger = (...args) => console.log(...args);

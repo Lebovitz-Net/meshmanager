@@ -5,24 +5,34 @@ import useTCPNodes from '@/hooks/useTCPNodes';
 
 export default function Nodes({ useDummyData = false }) {
   const [nodes, setNodes] = useState([]);
-  const [expandedNodeId, setExpandedNodeId] = useState(null); // track expanded node
+  const [expandedNodeId, setExpandedNodeId] = useState(null);
 
-  const {
-    nodes: tcpNodes,
-    error,
-    loading,
-    sendRequest,
-  } = useTCPNodes();
+  // 🔧 Define activation logic
+  const active = !useDummyData; // Only activate bridge if not using dummy data
 
-  const refresh = () => {
-    sendRequest();
-  };
+  // 🔧 Pass `active` into the hook
+ const {
+  nodes: tcpNodes,
+  error,
+  loading,
+  sendRequest,
+  status,
+  protocolState
+} = useTCPNodes({ active: true });
+
 
   useEffect(() => {
     if (useDummyData) {
       setNodes([
-        { id: 'dummy1', name: 'DummyNode1', ip: '10.0.0.1', channel: 'A' },
-        { id: 'dummy2', name: 'DummyNode2', ip: '10.0.0.2', channel: 'B' },
+        {
+          id: 'dummy1',
+          longName: 'DummyNode1',
+          hwModel: 'TestModel',
+          position: { latitudeI: 42.0, longitudeI: -71.0, altitude: 100 },
+          battery: 95,
+          source: 'dummy',
+          updated: Date.now()
+        }
       ]);
     } else {
       setNodes(tcpNodes);
@@ -33,29 +43,51 @@ export default function Nodes({ useDummyData = false }) {
     setExpandedNodeId((prev) => (prev === nodeId ? null : nodeId));
   };
 
-  if (useDummyData && nodes.length === 0) {
-    return <Typography>Loading dummy nodes...</Typography>;
-  }
+  const refresh = () => sendRequest();
 
-  if (!useDummyData && loading && nodes.length === 0) {
+  if (loading && nodes.length === 0) {
     return <Typography>Connecting to mesh node via TCP...</Typography>;
   }
 
   if (nodes.length === 0) {
     return (
       <Box sx={{ mb: 2 }}>
-        <Typography>No nodes available.</Typography>
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          Protocol State: <strong>{protocolState}</strong>
+        </Typography>
+
+        {protocolState === 'connecting' && (
+          <Typography>Connecting to mesh node via TCP...</Typography>
+        )}
+        {protocolState === 'handshake' && (
+          <Typography>Handshaking with mesh node...</Typography>
+        )}
+        {protocolState === 'retrying' && (
+          <Typography>Retrying handshake...</Typography>
+        )}
+        {protocolState === 'ready' && (
+          <Typography>No nodes received yet.</Typography>
+        )}
+        {protocolState === 'error' && (
+          <Typography color="error">Bridge error occurred.</Typography>
+        )}
+        {protocolState === 'closed' && (
+          <Typography>Bridge closed. Reactivate to reconnect.</Typography>
+        )}
+
         {error && (
           <Typography color="error" sx={{ mt: 1 }}>
             Error: {error.message || 'Unknown decoding failure'}
           </Typography>
         )}
+
         <Button onClick={refresh} variant="outlined" sx={{ mt: 2 }}>
           Retry
         </Button>
       </Box>
     );
   }
+
 
   return (
     <Box>
@@ -69,23 +101,18 @@ export default function Nodes({ useDummyData = false }) {
       )}
       {nodes.map((node, idx) => {
         const stableId =
-          node.node_num ??
-          node.node_id ??
-          node.nodeId ??
-          node.id ??
-          node.ip ??
-          `node-${idx}`;
+          node.nodeId ?? node.id ?? node.user?.id ?? node.ip ?? `node-${idx}`;
         return (
           <NodeDetails
             key={stableId}
             node={node}
+            status={status}
             expanded={expandedNodeId === stableId}
             onToggle={() => handleToggle(stableId)}
             useDummyData={useDummyData}
           />
         );
       })}
-
     </Box>
   );
 }

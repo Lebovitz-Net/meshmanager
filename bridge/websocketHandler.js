@@ -56,7 +56,7 @@ export default function startWebSocketHandler() {
 
     ws.on('message', (msg) => {
       tcp.write(msg);
-      console.log(`📤 WS → TCP [${ws.id}] (${msg.length} bytes)`);
+      console.log(`📤 WS → TCP [${ws.id}] (${msg.length} bytes)`, msg);
     });
 
     ws.on('close', () => {

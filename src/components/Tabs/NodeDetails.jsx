@@ -1,28 +1,29 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Box, Typography, Collapse } from '@mui/material';
-import { useMeshSocketBridge } from '@/hooks/useMeshSocketBridge.js';
-import { useNodeSubscription } from '@/hooks/useNodeSubscription.js';
-import { getWSUrl } from '@/utils/config';
-import { handlePacket } from '@/utils/handlePacket.js';
+import { useNodeSubscription } from '@/hooks/useNodeSubscription';
+import { useNodeDiagnostics } from '@/hooks/useNodeDiagnostics';
 
 export default function NodeDetails({
   node,
+  status,
   expanded = false,
   onToggle,
   useDummyData = false
 }) {
-  if (!node) return null;
-
   const [messages, setMessages] = useState([]);
   const [debouncedActive, setDebouncedActive] = useState(false);
   const lastExpanded = useRef(expanded);
 
   const packetHandler = useCallback(
-    (packet) => handlePacket(packet, node?.id, setMessages),
-    [node?.id]
+    (packet) => setMessages((prev) => [...prev, packet]),
+    []
   );
 
-  // Debounce expand to avoid rapid toggle churn
+  const { latest: diagnosticPacket } = useNodeDiagnostics({
+    nodeNum: node.num,
+    packet: messages[messages.length - 1]
+  });
+
   useEffect(() => {
     if (expanded !== lastExpanded.current) {
       lastExpanded.current = expanded;
@@ -31,103 +32,23 @@ export default function NodeDetails({
     }
   }, [expanded]);
 
-  const handleMessage = useCallback((data) => {
-    try {
-      const parsed = typeof data === 'string' ? JSON.parse(data) : data;
-      setMessages((prev) => [...prev, parsed]);
-    } catch (e) {
-      console.warn('[NodeDetails] Failed to parse incoming message', e);
-    }
-  }, []);
-
-  const handleOpen = useCallback(() => {
-    if (useDummyData) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          position: {
-            latitude: 42.0,
-            longitude: -71.0,
-            speed: 0,
-            heading: 0,
-            dop: 1.0
-          },
-          battery: 95
-        }
-      ]);
-    }
-  }, [useDummyData]);
-
-  const handleError = useCallback((err) => {
-    const reason = err?.message || err?.type || 'Unknown WebSocket error';
-    console.error('[NodeDetails] WebSocket error:', reason, err?.raw || err);
-  }, []);
-
-  const handleClose = useCallback(() => {
-    console.log('[NodeDetails] WebSocket closed');
-  }, []);
-
-  const nodeDetailsHandlers = useMemo(() => ({
-    onOpen: handleOpen,
-    onMessage: handleMessage,
-    onError: handleError,
-    onClose: handleClose
-  }), [handleOpen, handleMessage, handleError, handleClose]);
-
-  const shouldConnect = useMemo(() => {
-    return debouncedActive && !!node?.id;
-  }, [debouncedActive, node?.id]);
-
-  const nodeKey = node.id ?? node.nodeId ?? node.node_id ?? node.ip;
-  const { status, send } = useMeshSocketBridge({
-    url: nodeKey ? getWSUrl(nodeKey) : undefined,
-    binary: false,
-    active: shouldConnect && !!nodeKey,
-    idleMs: 5000,
-    handlers: nodeDetailsHandlers
-  });
-
   useNodeSubscription({
-    nodeId: node.id,
-    active: shouldConnect,
-    status,
-    send,
+    nodeId: node.nodeId ?? node.id,
+    active: debouncedActive,
     onPacket: packetHandler
   });
 
-  const latest = messages.length > 0 ? messages[messages.length - 1] : {};
+  const latest = messages[messages.length - 1] || {};
+  const now = Date.now();
+  const isStale = node.updated ? now - node.updated > 10000 : true;
 
-  // 🔹 Safe multi-path lookup for names
-  const longName =
-    node.longName ??
-    node.payload?.longName ??
-    node.decoded?.user?.longName ??
-    '';
-  const shortName =
-    node.shortName ??
-    node.payload?.shortName ??
-    node.decoded?.user?.shortName ??
-    '';
+  const lat = node.position?.latitudeI ?? latest.position?.latitude;
+  const lon = node.position?.longitudeI ?? latest.position?.longitude;
+  const alt = node.position?.altitude ?? latest.position?.altitude;
 
-  const {
-    id,
-    channel,
-    battery,
-    hardwareModel,
-    lastHeard,
-    hopsAway,
-    viaMqtt,
-    lat,
-    lon,
-    alt
-  } = node;
-
-  const formattedLastHeard = lastHeard
-    ? new Date(lastHeard * 1000).toLocaleString()
-    : 'Unknown';
-
-  console.log('[NodeDetails] node:', node);
-  console.log('[NodeDetails] resolved longName:', longName, 'shortName:', shortName);
+  const longName = node.longName ?? node.user?.longName ?? '';
+  const shortName = node.shortName ?? node.user?.shortName ?? '';
+  const nodeId = node.nodeId ?? node.id ?? node.user?.id;
 
   return (
     <Box mt={2} p={2} border={1} borderRadius={2} borderColor="grey.300">
@@ -137,25 +58,24 @@ export default function NodeDetails({
         sx={{ cursor: 'pointer' }}
         onClick={onToggle}
       >
-        {longName || shortName || id || 'Unnamed Node'}
+        {longName || shortName || nodeId || 'Unnamed Node'}
       </Typography>
 
-      {channel && <Typography variant="body2">Channel: {channel}</Typography>}
-      <Typography variant="body2">Status: {status}</Typography>
-      {hardwareModel && (
-        <Typography variant="body2">Hardware: {hardwareModel}</Typography>
+      <Typography variant="body2">Node ID: {nodeId}</Typography>
+      {node.hwModel && (
+        <Typography variant="body2">Hardware Model: {node.hwModel}</Typography>
       )}
-      {battery != null && (
-        <Typography variant="body2">Battery: {battery}%</Typography>
+      {node.owner && (
+        <Typography variant="body2">Owner: {node.owner}</Typography>
       )}
-      <Typography variant="body2">Last Heard: {formattedLastHeard}</Typography>
-      {hopsAway != null && (
-        <Typography variant="body2">Hops Away: {hopsAway}</Typography>
+      {node.source && (
+        <Typography variant="body2">Source: {node.source}</Typography>
       )}
-      {viaMqtt != null && (
-        <Typography variant="body2">
-          Via MQTT: {viaMqtt ? 'Yes' : 'No'}
-        </Typography>
+      {node.packetType && (
+        <Typography variant="body2">Packet Type: {node.packetType}</Typography>
+      )}
+      {node.battery != null && (
+        <Typography variant="body2">Battery: {node.battery}%</Typography>
       )}
       {lat != null && lon != null && (
         <Typography variant="body2">
@@ -169,10 +89,27 @@ export default function NodeDetails({
           </a>
         </Typography>
       )}
-      {alt != null && <Typography variant="body2">Altitude: {alt} m</Typography>}
+      {alt != null && (
+        <Typography variant="body2">Altitude: {alt} m</Typography>
+      )}
+      <Typography variant="body2">Status: {status}</Typography>
+      {isStale && (
+        <Typography variant="body2" color="warning.main">
+          ⚠️ Node stale (no update in 10s)
+        </Typography>
+      )}
 
       <Collapse in={expanded} timeout="auto" unmountOnExit>
         <Box mt={1}>
+            {diagnosticPacket ? (
+              <pre>{JSON.stringify(diagnosticPacket.packet, null, 2)}</pre>
+            ) : (
+              <Typography variant="body2" color="text.secondary">
+                No diagnostic data available.
+              </Typography>
+            )}
+          </Box>
+          <Box mt={1}>
           {latest.position && (
             <>
               <Typography variant="body2">

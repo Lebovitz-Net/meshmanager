@@ -33,14 +33,16 @@ export function buildToRadioFrame(fieldName, value, opts = {}) {
     console.warn(`Invalid fieldName: ${fieldName} not in ToRadio.oneof`);
     return null;
   }
-
+  console.log("[buildToRadioFrame] fieldName is", fieldName, "value is", value);
   const toRadioMsg = ToRadio.create({ [fieldName]: value });
   const encoded = ToRadio.encode(toRadioMsg).finish();
   return frame(encoded, opts);
 }
 
 export const buildWantConfigIDFrame = () => {
-  return buildToRadioFrame('wantConfigId', true);
+  const tbuf =  buildToRadioFrame('wantConfigId', true);
+  console.log("[buildWantConfigIDFrame] tbuf is", tbuf);
+  return tbuf;
 };
 
 export function extractFramedPayloads(buffer, maxLen = 512) {
@@ -66,7 +68,7 @@ export function extractFramedPayloads(buffer, maxLen = 512) {
 
     offset += 4 + len;
   }
-
+console.log("[extractFramedPayloads] buffer is", buffer);
   const leftover = buffer.slice(offset);
   return { frames, leftover };
 }
@@ -151,4 +153,25 @@ export function buildAdminWantNodesFrame(opts = {}) {
   });
 
   return buildToRadioFrame('packet', mesh, opts);
+}
+
+/**
+ * Safely calls an event handler, with type checking and error logging.
+ * @param {Function} fn - The handler to call.
+ * @param {string} eventType - The event type (for logging).
+ * @param {*} event - The event payload to pass to the handler.
+ */
+function callHandler(fn, eventType, event) {
+  if (typeof fn === 'function') {
+    try {
+      fn(event);
+    } catch (err) {
+      console.error(`[SocketInterface] Listener error on ${eventType}:`, err);
+    }
+  } else {
+    console.warn(
+      `[SocketInterface] Skipping non-function listener for ${eventType}`,
+      fn
+    );
+  }
 }
