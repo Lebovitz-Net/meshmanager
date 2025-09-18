@@ -6,11 +6,13 @@
 │  │—— meshBridge.js
 │  │—— mqttBridge.js
 │  │—— packetDecoders.js
-│  │—— tcpClient.js
+│  │—— tcpHandler.js
 │  │—— websocketHandler.js
 │  ╵—— wsServer.js
 │—— disabled
+│  │—— useFlowControl.js
 │  │—— useMeshBridge.js.disabled
+│  │—— useMeshLifeCycle.js
 │  │—— useMeshMessages.js.disabled
 │  │—— useMeshWebSocket.js.disabled
 │  │—— useNodesList.js.disabled
@@ -181,12 +183,17 @@
 │  │—— hooks
 │  │  │—— diagnostics.js
 │  │  │—— useBridgeLifecycle.js
-│  │  │—— useFlowControl.js
-│  │  │—— useMeshLifeCycle.js
 │  │  │—— useMeshSocketBridge.js
+│  │  │—— useNodeDiagnostics.js
+│  │  │—— useNodesState.js
 │  │  │—— useNodeSubscription.js
 │  │  │—— useSocketInterface.js
+│  │  │—— useStateTracker.js
 │  │  ╵—— useTCPNodes.js
+│  │—— Packets
+│  │  │—— packetCatagorizer.js
+│  │  │—— PacketDecoders.js
+│  │  ╵—— packetIndex.js
 │  │—— pages
 │  │  │—— ContactsPage.jsx
 │  │  │—— Home.jsx
@@ -195,10 +202,11 @@
 │  │  │—— NodesPage.jsx
 │  │  ╵—— NotFoundPage.jsx
 │  │—— utils
+│  │  │—— bridgeAdapter.js
 │  │  │—— config.js
 │  │  │—— decodeFrame.js
 │  │  │—— decodeNodesResponse.js
-│  │  │—— decodePacket.js
+│  │  │—— eventUtils.js
 │  │  │—— handlePacket.js
 │  │  │—— mockFirmwareData.js
 │  │  │—— nodeEvents.js
@@ -227,19 +235,22 @@
 │—— .env.production
 │—— .gitattributes
 │—— .gitignore
+│—— achitecture.md
+│—— cat
 │—— config.yaml
+│—— enhanced_state_machine.md
 │—— filestructure.md
 │—— filestructure.ps1
-│—— foo
 │—— implmenting-ack.md
 │—— index.html
 │—— meshmanager.code-workspace
-│—— oldtpnodes.js.txt
-│—— olduseMeshSocketBridge.js.txt
 │—— package-lock.json
 │—— package.json
+│—— packets-architecture.md
+│—— packets.md
 │—— README.md
 │—— rewrite-imports.py
-│—— tagging.md
+│—— tagging-and-tracing-connections.md
 │—— vite.config.js
-╵—— vite.config.js.new
+│—— vite.config.js.new
+╵—— websocket-tagging.md

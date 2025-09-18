@@ -1,19 +1,23 @@
 import { useRef, useState, useEffect } from 'react';
-import { addListener, removeListener, emit } from '@/utils/eventUtils';
+import { emit } from '@/utils/eventUtils';
+import { useStateTracker } from './useStateTracker';
+import { sendToBridge } from '@/utils/bridgeAdapter.js'; // ⬅️ new import
 
 export function useSocketInterface({ url, binary = false, active }) {
-
   const socketRef = useRef(null);
-  const [status, setStatus] = useState('idle'); // 'idle' | 'connecting' | 'open' | 'error' | 'closed'
 
   // Tagging + history tracking
   const connectionCounterRef = useRef(0);
   const currentTagRef = useRef(null);
   const wasOpenedRef = useRef(false);
 
-  const updateStatus = (next) => {
-    setStatus(next);
-  };
+  const {
+    protocolState,
+    setProtocolState,
+    startAckWait,
+    resolveAck,
+    cancelAllAcks
+  } = useStateTracker({ ackTimeoutMs: 5000 });
 
   const connect = () => {
     if (socketRef.current) return;
@@ -21,27 +25,67 @@ export function useSocketInterface({ url, binary = false, active }) {
     const tag = ++connectionCounterRef.current;
     currentTagRef.current = tag;
     wasOpenedRef.current = false;
-    updateStatus('connecting');
+    setProtocolState('connecting');
 
     const ws = new WebSocket(url);
     ws.binaryType = binary ? 'arraybuffer' : 'blob';
 
     ws.onopen = () => {
-      console.log(`[TAG ${tag}] OPEN`);
-      socketRef.current = ws;
+      console.log(`[TAG ${tag}] OPEN`, ws.readyState);
       wasOpenedRef.current = true;
-      updateStatus('open');
+      socketRef.current = ws;
+      setProtocolState('open');
       emit('socket', 'open', { type: 'open' });
     };
 
     ws.onmessage = (e) => {
       const data = binary ? new Uint8Array(e.data) : e.data;
-      emit('socket', 'message', data);
+      let frame;
+      console.log(`[TAG ${tag}] MESSAGE ${typeof data}`, data, binary);
+
+      const type = data instanceof ArrayBuffer || data instanceof Uint8Array ? 'binary' : typeof data;
+
+      switch (type) {
+        case 'string':
+          try {
+            frame = JSON.parse(data);
+          } catch (err) {
+            console.warn('Failed to parse string message:', err);
+            frame = null;
+          }
+          break;
+        case 'binary':
+          frame = decodeFrame(data);
+          break;
+        case 'object':
+          frame = data;
+          break;
+        default:
+          frame = null;
+          console.warn('Unrecognized frame format');
+          break;
+      }
+
+      if (frame) {
+        // 🔹 Adapt new bridge format to old UI expectations
+        emit('socket', 'message', frame);
+        
+        // 🔁 Lifecycle transitions (unchanged)
+        if (frame.portNum === 63 && frame.payload?.ack) {
+          resolveAck(frame.requestId);
+          setProtocolState('waiting');
+        }
+
+        if (frame.portNum === 64 && frame.payload?.reply) {
+          setProtocolState('open');
+          handleReply(frame.payload.reply);
+        }
+      }
     };
 
     ws.onerror = (e) => {
       console.error(`[TAG ${tag}] ERROR`, e);
-      updateStatus('error');
+      setProtocolState('error');
       emit('socket', 'error', {
         type: e?.type || 'error',
         message: 'WebSocket error occurred',
@@ -51,7 +95,11 @@ export function useSocketInterface({ url, binary = false, active }) {
 
     ws.onclose = (e) => {
       console.log(`[TAG ${tag}] CLOSE code=${e?.code} reason=${e?.reason} wasClean=${e?.wasClean}`);
-      updateStatus('closed');
+      if (e.code === 1013) {
+        setProtocolState('closing');
+      } else {
+        setProtocolState('closed');
+      }
       emit('socket', 'close', {
         type: 'close',
         code: e?.code,
@@ -60,7 +108,7 @@ export function useSocketInterface({ url, binary = false, active }) {
     };
   };
 
-  const send = (data) => {
+  const send = (payload) => {
     const ws = socketRef.current;
     const ready = ws?.readyState;
     const tag = currentTagRef.current;
@@ -68,17 +116,19 @@ export function useSocketInterface({ url, binary = false, active }) {
     console.log(`[TAG ${tag}] SEND ATTEMPT`, {
       ready,
       wasOpened: wasOpenedRef.current,
-      status
+      protocolState
     });
 
-    if (ready === WebSocket.OPEN) {
-      const payload = data;
-      console.log(`[TAG ${tag}] SEND`, payload);
-      ws.send(payload);
+    if (ready !== WebSocket.OPEN) {
+      console.warn(`[TAG ${tag}] SEND failed, websocket ${wasOpenedRef.current ? 'was open earlier' : 'never opened'}`, {
+        ready,
+        wasOpened: wasOpenedRef.current,
+        protocolState
+      });
     } else {
-      console.warn(
-        `[TAG ${tag}] Socket not open, send skipped — ${wasOpenedRef.current ? 'was open earlier' : 'never opened'}`
-      );
+      console.log(`[TAG ${tag}] SEND`, payload);
+      // 🔹 Use guarded send
+      sendToBridge(ws, payload);
     }
   };
 
@@ -88,7 +138,6 @@ export function useSocketInterface({ url, binary = false, active }) {
       console.log(`[TAG ${tag}] MANUAL CLOSE CALLED`);
       socketRef.current.close();
       socketRef.current = null;
-      updateStatus('closed');
     }
   };
 
@@ -96,7 +145,7 @@ export function useSocketInterface({ url, binary = false, active }) {
     connect,
     close,
     send,
-
-    status
+    protocolState,
+    setProtocolState
   };
 }

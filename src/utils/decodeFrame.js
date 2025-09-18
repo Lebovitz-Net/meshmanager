@@ -32,7 +32,7 @@ export function decodeFrame(buffer, source = 'unknown') {
     }
   }
 
-  return decodedPackets;
+  return frames;
 }
 
 function extractSubPacket(meshPacket) {

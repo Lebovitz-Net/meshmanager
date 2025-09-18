@@ -1,11 +1,8 @@
-markdown
 # 📡 ACK Tracking Integration in Mesh Dashboard
 
 ## 🧠 Overview
 
 ACK tracking ensures reliable packet delivery across mesh networks by correlating outbound requests with inbound acknowledgments. It’s especially critical when using `wantAck` in Meshtastic-style protocols, where delivery guarantees matter for config, routing, or telemetry.
-
----
 
 ## 🔧 Frontend Integration
 
@@ -18,10 +15,14 @@ send(JSON.stringify({
   txId,
   wantAck: true
 }));
-•	txId must be unique per request
-•	wantAck: true signals the device to respond with an ACK
+```
+
+* txId must be unique per request
+* wantAck: true signals the device to respond with an ACK
+
 2. Track Pending ACKs
-js
+
+```js
 const pendingAcks = useRef(new Map()); // txId → { timestamp, retries, originalPacket }
 
 function trackAck(txId, packet) {
@@ -35,8 +36,11 @@ function trackAck(txId, packet) {
 function clearAck(txId) {
   pendingAcks.current.delete(txId);
 }
+```
+
 3. Detect Incoming ACKs
-js
+
+```js
 function handleMessage(data) {
   const parsed = typeof data === 'string' ? JSON.parse(data) : decodeBinary(data);
 
@@ -47,8 +51,11 @@ function handleMessage(data) {
 
   // Continue with normal decode flow...
 }
+```
+
 4. Retry & Timeout Logic
-js
+
+```js
 useEffect(() => {
   const interval = setInterval(() => {
     const now = Date.now();
@@ -107,6 +114,7 @@ setInterval(() => {
     }
   }
 }, 1000);
+```
 🧩 Optional Enhancements
 •	Surface pendingAcks.size to UI for diagnostics
 •	Annotate nodes with last ACK timestamp
@@ -120,4 +128,5 @@ ACK tracking adds reliability, observability, and teachability to your mesh dash
 •	Protocol scaffolds (ACK detection, state transitions)
 This integration ensures delivery guarantees, supports retries, and enables diagnostic overlays for debugging and onboarding.
 Code
+
 

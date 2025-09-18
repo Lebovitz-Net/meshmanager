@@ -1,31 +1,25 @@
-/**
- * Recursively normalizes Buffer fields in an object,
- * converting them to hex strings unless they're named 'payload' or 'data'.
- * Safe for decoded protobuf packets.
- */
+const DEFAULT_SKIP_KEYS = ['payload', 'data'];
 
-const SKIP_KEYS = ['payload', 'data'];
-
-export function normalizeBuffers(obj, path = []) {
+export function normalizeBuffers(obj, path = [], skipKeys = DEFAULT_SKIP_KEYS, encoding = 'hex') {
   if (Buffer.isBuffer(obj)) {
-    const keyPath = path.join('.');
     const lastKey = path[path.length - 1];
-    if (SKIP_KEYS.includes(lastKey)) {
+    if (skipKeys.includes(lastKey)) {
       return obj; // preserve raw buffer for decoding
     }
-    return obj.toString('hex');
+    return obj.toString(encoding);
   }
 
   if (Array.isArray(obj)) {
-    return obj.map((item, i) => normalizeBuffers(item, [...path, i]));
+    return obj.map((item, i) => normalizeBuffers(item, [...path, i], skipKeys, encoding));
   }
 
   if (obj !== null && typeof obj === 'object') {
     const result = {};
     for (const key of Object.keys(obj)) {
-        result[key] = normalizeBuffers(obj[key], [...path, key]);
+      result[key] = normalizeBuffers(obj[key], [...path, key], skipKeys, encoding);
     }
     return result;
   }
+
   return obj;
 }

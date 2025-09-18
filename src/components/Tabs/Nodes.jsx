@@ -16,8 +16,7 @@ export default function Nodes({ useDummyData = false }) {
   error,
   loading,
   sendRequest,
-  status,
-  protocolState
+  protocolState,
 } = useTCPNodes({ active: true });
 
 
@@ -106,7 +105,7 @@ export default function Nodes({ useDummyData = false }) {
           <NodeDetails
             key={stableId}
             node={node}
-            status={status}
+            status={protocolState}
             expanded={expandedNodeId === stableId}
             onToggle={() => handleToggle(stableId)}
             useDummyData={useDummyData}

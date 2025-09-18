@@ -38,7 +38,6 @@ export default function useTCPNodes({ active = true }) {
     error,
     loading: bridge.protocolState !== 'ready',
     protocolState: bridge.protocolState,
-    status: bridge.status,
     sendRequest: bridge.sendRequest
   };
 }

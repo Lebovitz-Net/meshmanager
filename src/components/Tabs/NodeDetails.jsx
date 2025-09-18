@@ -34,6 +34,7 @@ export default function NodeDetails({
 
   useNodeSubscription({
     nodeId: node.nodeId ?? node.id,
+    status,
     active: debouncedActive,
     onPacket: packetHandler
   });

@@ -1,6 +1,8 @@
 import protobuf from 'protobufjs';
 import protoJson from '../src/assets/proto.json' with { type: 'json' };
 import { normalizeBuffers } from './bufferUtils.js'; // assuming you extract it
+import { logPacket } from './packets/packetLogger.js';
+
 
 let root;
 let MeshPacket, FromRadio, NodeInfo, Telemetry, DeviceMetrics;
@@ -56,6 +58,7 @@ function classifyMeshPacket(mp, source) {
 }
 
 function decodeByPort(portnum, payload) {
+  console.log("[decodeByPort] portnum is", portnum, "payload len", payload?.length);
   switch (portnum) {
     case 67: return { type: 'NodeInfo', decoded: tryDecodeBytes(payload, NodeInfo, 'NodeInfo') };
     case 68: return { type: 'Telemetry', decoded: tryDecodeBytes(payload, Telemetry, 'Telemetry') };
@@ -69,7 +72,8 @@ const packetHandlers = {
   MeshPacket: (packet) => classifyMeshPacket(packet, packet.source || 'tcp')
 };
 
-export function decodeAndNormalize(buffer, source = 'tcp') {
+export function decodeAndNormalize(buffer, source = 'tcp', connId = 'unknown') {
+
   const raw =
     tryDecodeBytes(buffer, FromRadio, 'FromRadio') ||
     tryDecodeBytes(buffer, MeshPacket, 'MeshPacket');
@@ -79,6 +83,19 @@ export function decodeAndNormalize(buffer, source = 'tcp') {
   // Attach metadata
   raw.type = raw.constructor?.name || 'Unknown';
   raw.source = source;
+  raw.connId = connId;
 
-  return normalizeBuffers(raw);
+    logPacket({
+    type: raw.type,
+    variant: raw.payloadVariant,
+    nodeId: raw.nodeId || 'UnknownNode',
+    timestamp: Date.now(),
+    source,
+    payload: raw
+  });
+
+  const normalized = normalizeBuffers(raw);
+  const categorized = packetHandlers[raw.type]?.(normalized) || normalized;
+
+  return categorized;
 }

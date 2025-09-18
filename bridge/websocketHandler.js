@@ -1,68 +1,118 @@
-import createWSServer from './wsServer.js';
-import createTCPClient from './tcpClient.js';
+// bridge/websocketHandler.js
+import createTCPHandler from './tcpHandler.js';
 import { currentIPHost, currentIPPort } from '../src/utils/config.js';
-import { randomUUID } from 'crypto';
 import { decodeAndNormalize } from './packetDecoders.js';
-import { processLocalPacket, setActiveSession } from './meshBridge.js';
+import { processLocalPacketMulti, getActiveSessions, setActiveSessions } from './meshBridge.js';
 
-const WS_PORT = 8080;
-let activeSession = null;
+export default function createWebsocketHandler() {
+  const sessions = new Map();
+  setActiveSessions(sessions);
 
-export default function startWebSocketHandler() {
-  createWSServer(WS_PORT, (ws) => {
-    if (activeSession) {
-      ws.close(1013, 'Another session is active');
-      return;
-    }
+  return {
+    connect(ws, ctx) {
+      const tcpConnections = new Map();
+      sessions.set(ctx.id, { ws, tcpConnections });
 
-    ws.id = randomUUID();
-    console.log(`🌐 WS handshake — ID: ${ws.id}`);
+      function isPlainObject(obj) {
+        return Object.prototype.toString.call(obj) === '[object Object]';
+      };
 
-    const tcp = createTCPClient(currentIPHost, currentIPPort, {
-      onConnect: () => console.log(`✅ TCP connected for WS ${ws.id}`),
 
-      onFrame: (buffer) => {
-        const packet = decodeAndNormalize(buffer, 'tcp');
-        if (!packet || packet.type === 'Unknown') return;
-        processLocalPacket(packet);
-      },
+      function sendWS(transportType, packet) {
+        if (!isPlainObject(packet)) return;
 
-      onError: (err) => {
-        console.error('❌ TCP error:', err.message);
-        ws.close(1011, 'TCP error');
-        activeSession = null;
-      },
-
-      onClose: () => {
-        ws.close(1000, 'TCP closed');
-        activeSession = null;
-      },
-
-      onTimeout: () => {
-        ws.close(1011, 'TCP timeout');
-        activeSession = null;
-      },
-
-      onDrain: () => console.log('💧 TCP write buffer drained'),
-
-      onEnd: () => {
-        ws.close(1000, 'TCP remote end');
-        activeSession = null;
+        for (const [sessionId, { ws }] of getActiveSessions().entries()) {
+          if (ws.readyState === ws.OPEN) {
+            try {
+              const enriched = { ...packet, transportType };
+              ws.send(JSON.stringify(enriched));
+            } catch (err) {
+              console.error(`[meshBridge] WS send error to ${sessionId}:`, err.message);
+            }
+          }
+        }
       }
-    });
 
-    activeSession = { ws, tcp };
-    setActiveSession(activeSession);
+      const openTCPConnection = (connId, host, port) => {
+        sendWS('channel_status', { connId, status: 'connecting' });
 
-    ws.on('message', (msg) => {
-      tcp.write(msg);
-      console.log(`📤 WS → TCP [${ws.id}] (${msg.length} bytes)`, msg);
-    });
+        const tcp = createTCPHandler(connId, host, port, {
+          onConnect: (id) => sendWS('channel_status', { connId, status: 'ready' }),
+          onFrame: (id, buffer) => {
+            const packet = decodeAndNormalize(buffer, 'tcp', id);
+            if (!packet || packet.type === 'Unknown') return;
+            sendWS('frame', packet);
+            processLocalPacketMulti(packet);
+          },
+          onError: (id, err) => {
+            sendWS('channel_status', { connId, status: 'error', detail: err.message });
+            scheduleReconnect(connId, host, port);
+          },
+          onClose: (id) => {
+            sendWS('channel_status', { connId, status: 'disconnected' });
+            scheduleReconnect(connId, host, port);
+          },
+          onTimeout: (id) => {
+            sendWS('channel_status', { connId, status: 'timeout' });
+            scheduleReconnect(connId, host, port);
+          },
+          onEnd: (id) => {
+            sendWS('channel_status', { connId, status: 'remote_end' });
+            scheduleReconnect(connId, host, port);
+          }
+        });
 
-    ws.on('close', () => {
-      tcp.end();
-      activeSession = null;
-      console.log(`🛑 WS disconnected — ID: ${ws.id}`);
-    });
-  });
+        tcpConnections.set(connId, { tcp, host, port, reconnectTimer: null });
+      };
+
+      const scheduleReconnect = (connId, host, port) => {
+        const entry = tcpConnections.get(connId);
+        if (!entry || entry.reconnectTimer) return;
+        entry.reconnectTimer = setTimeout(() => {
+          entry.reconnectTimer = null;
+          openTCPConnection(connId, host, port);
+        }, 3000);
+      };
+
+      ws.on('message', (msg) => {
+        try {
+          const packet = JSON.parse(msg);
+          const { transportType, connId, target } = packet;
+
+          if (transportType === 'open_channel') {
+            const id = connId || ctx.id;
+            openTCPConnection(id, target?.host || currentIPHost, target?.port || currentIPPort);
+            return;
+          }
+
+          if (transportType === 'close_channel' && tcpConnections.has(connId)) {
+            tcpConnections.get(connId).tcp.end();
+            tcpConnections.delete(connId);
+            sendWS('channel_status', { connId, status: 'closed' });
+            return;
+          }
+
+          if (transportType === 'frame' && tcpConnections.has(connId)) {
+            const objToArray = (obj) => Object.keys(obj).map((key) => obj[key]);
+            tcpConnections.get(connId).tcp.write(objToArray(packet));
+            return;
+          }
+
+        } catch (err) {
+          console.error('Invalid WS message', err);
+        }
+
+      });
+
+      ws.on('close', () => {
+        tcpConnections.forEach(({ tcp, reconnectTimer }) => {
+          if (reconnectTimer) clearTimeout(reconnectTimer);
+          tcp.end();
+        });
+        tcpConnections.clear();
+        sessions.delete(ctx.id);
+        setActiveSessions(sessions);
+      });
+    }
+  };
 }

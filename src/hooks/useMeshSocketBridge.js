@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useSocketInterface } from '@/hooks/useSocketInterface';
 import { getWSUrl } from '@/utils/config.js';
 import { buildWantConfigIDFrame } from '@/utils/protoHelpers.js';
-import { decodeFrame } from '@/utils/decodeFrame.js';
-import { addListener, removeListener } from '@/utils/eventUtils';
+import { addListener, removeListener, emit } from '@/utils/eventUtils';
 
 // Utility to classify parsed messages
 function classifyMessage(parsed) {
@@ -18,14 +17,14 @@ export function useMeshSocketBridge({
   binary = true,
   handlers = {}
 }) {
-  const [protocolState, setProtocolState] = useState('init'); // init → ready
   const idleTimerRef = useRef(null);
 
   const {
     connect,
+    protocolState,
+    setProtocolState,
     close,
     send,
-    status,
   } = useSocketInterface({
     url: getWSUrl(),
     binary,
@@ -39,57 +38,40 @@ export function useMeshSocketBridge({
   }, [active, connect, close]);
 
   // Idle timeout handling — reset on any message
-  useEffect(() => {
-    if (!active || idleMs <= 0) return;
+  // useEffect(() => {
+  //   if (!active || idleMs <= 0) return;
 
-    const resetIdleTimer = () => {
-      clearTimeout(idleTimerRef.current);
-      idleTimerRef.current = setTimeout(() => {
-        console.log('[MeshSocketBridge] Idle timeout — closing socket');
-        close();
-      }, idleMs);
-    };
+  //   const resetIdleTimer = () => {
+  //     clearTimeout(idleTimerRef.current);
+  //     idleTimerRef.current = setTimeout(() => {
+  //       console.log('[MeshSocketBridge] Idle timeout — closing socket');
+  //       close();
+  //     }, idleMs);
+  //   };
 
-    addListener('socket', 'message', resetIdleTimer);
-    resetIdleTimer();
+  //   addListener('socket', 'message', resetIdleTimer);
+  //   resetIdleTimer();
 
-    return () => {
-      clearTimeout(idleTimerRef.current);
-      removeListener('socket', 'message', resetIdleTimer);
-    };
-  }, [active, idleMs, addListener, removeListener, close]);
+  //   return () => {
+  //     clearTimeout(idleTimerRef.current);
+  //     removeListener('socket', 'message', resetIdleTimer);
+  //   };
+  // }, [active, idleMs, addListener, removeListener, close]);
 
   // Protocol message handling — decode once, emit typed events
   const handleRawMessage = (data) => {
     try {
-      let parsed;
-      if (typeof data === 'string') {
-        parsed = JSON.parse(data);
-      } else if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
-        parsed = decodeFrame(data);
-      } else if (typeof data === 'object' && data !== null) {
-        console.log('[Skipping object]', data);
-        return;
-      } else {
-        console.warn('[Unknown incoming type]', data);
-        return;
-      }
-
       // Pass parsed object to external handler if provided
-      handlers.onMessage?.(parsed);
-
-      // Update protocol state if we detect node info
-      if (Array.isArray(parsed?.nodes)) {
-        setProtocolState('ready');
-      }
+      handlers.onMessage?.(data);
 
       // Emit typed event for downstream consumers
-      const type = classifyMessage(parsed);
-      emit('socket', type, parsed);
-
-    } catch (err) {
-      handlers.onError?.(err);
+      const type = classifyMessage(data);
+      console.log('[MeshSocketBridge] Emitting typed message:', type, data);
+      emit('socket', type, data);
     }
+    catch (err) {
+      emit('socket', 'error', err);;
+    };
   };
 
   // Subscribe to raw socket messages
@@ -120,18 +102,18 @@ useEffect(() => {
 
   // Protocol-ready trigger
   useEffect(() => {
-    if (status === 'open' && protocolState === 'ready') {
-      console.log('[MeshSocketBridge] Protocol ready — sending getConfig', status, protocolState);
+    if (protocolState === 'ready') {
+      console.log('[MeshSocketBridge] Protocol ready — sending getConfig', protocolState);
       send(buildWantConfigIDFrame());
       handlers.onReady?.();
     } else {
-      console.log('[MeshSocketBridge] Not ready yet', { status, protocolState });
+      console.log('[MeshSocketBridge] Not ready yet', { protocolState });
     }
-  }, [status, protocolState, send, handlers]);
+  }, [ protocolState, send, handlers]);
 
   // Manual trigger for getConfig
   const sendRequest = () => {
-    if (status !== 'open') {
+    if (protocolState !== 'ready') {
       console.warn('[MeshSocketBridge] Skipping send — socket not open');
       return;
     }
@@ -148,7 +130,6 @@ useEffect(() => {
 }, [protocolState, sendRequest]);
 
   return {
-    status,
     protocolState,
     send,
     connect,
