@@ -1,3 +1,111 @@
+# Data driven Architecture
+
+Moving from a UI driven display of the meshtastic nodes to a data driven architecture where the bridge server will take ownership of requesting data from the node and storing it in a database. Changes to the database will trigger the UI to update via a websocket interface.
+
+This document, catorizes the data and proposes and architecture for requesting and storing the data along with interfaces to the UI, and a database schema for the data.
+
+📦 Version 2 Architecture Overview
+🔧 Core Principles
+Modular handler-based dispatching
+
+Transport-agnostic routing via core/router.js
+
+Centralized packet ingestion and enrichment
+
+UI refresh triggers via websocketEmitter.js
+
+🗂️ Folder Structure Highlights
+handlers/: Entry points and request logic (websocketHandler, tcpHandler, getNodeInfo, etc.)
+
+packets/: Decoding and enrichment (packetDecoder, enrichPacket)
+
+core/: Routing, schema validation, and connection management
+
+db/: Storage logic for user info and metrics
+
+api/: Future HTTP exposure
+
+🔄 Data Flow
+plaintext
+Transport (TCP/WebSocket/MQTT)
+  → Handler (meshHandler, mqttHandler)
+    → ingestionRouter
+      → packetDecoder → enrichPacket
+        → insertUserInfo / insertMetrics
+          → websocketEmitter → UI refresh
+
+## File Structure
+
+The files for the architecture change is described in the diagram below. This diagram does not include existing directories for protobufs, documents, or tools such as validators.
+
+bridge/
+├── handlers/                   # Entry points + modular request logic
+│   ├── websocketHandler.js     # Handles incoming WebSocket messages
+│   ├── tcpHandler.js           # Manages TCP connections and lifecycle
+│   ├── meshHandler.js          # Formerly meshBridge.js
+│   ├── mqttHandler.js          # Formerly mqttBridge.js
+│   ├── getNodeInfo.js
+│   ├── getMetrics.js
+│   ├── updateConfig.js
+│   └── ...
+├── packets/                    # Decoding and enrichment logic
+│   ├── packetDecoder.js
+│   ├── packetTypes.js
+│   └── enrichPacket.js
+├── core/                       # Routing, schema, and client/session management
+│   ├── router.js               # Dispatches to handlers based on type
+│   ├── schema.js               # Validates message formats
+│   └── connectionManager.js    # Tracks clients, subscriptions, sessions
+├── db/                         # Storage layer (user_info + metrics)
+│   ├── schema.js
+│   ├── insertUserInfo.js
+│   ├── insertMetrics.js
+│   └── queryHandlers.js
+├── api/                        # Future HTTP API exposure
+│   ├── userInfoRoutes.js
+│   ├── metricsRoutes.js
+│   └── configRoutes.js
+├── ingestionRouter.js          # Entry point for FromRadio packets
+├── websocketEmitter.js         # Emits refresh triggers to UI
+
+## UI file structure
+
+src/
+├── api/                         # Replaces hooks with declarative fetch logic
+│   ├── userInfo.js              # nodes, channels, messages, connections
+│   ├── metrics.js               # telemetry, queue, packet logs
+│   ├── config.js                # config + module config
+│   └── websocket.js             # live updates from bridge
+├── components/
+│   ├── Navigation/              # Layout shell: menu, sidebar, topbar
+│   │   ├── Menu.js
+│   │   ├── TopBar.js
+│   │   ├── TopToolbar.js
+│   │   ├── Sidebar.js
+│   │   └── SidebarTabs.js
+│   ├── Tabs/                    # Tab content: Nodes, Channels, etc.
+│   │   ├── Nodes.js
+│   │   ├── Channels.js
+│   │   ├── Contacts.js
+│   │   ├── Map.js
+│   │   └── Connections.js
+│   ├── UserInfo/                # UI components for user_info domain
+│   ├── Config/                  # UI components for config editing
+│   └── Metrics/                 # UI overlays for telemetry, queue health
+├── pages/
+│   ├── HomePage.js              # Shell layout + Navigation + Tabs
+│   ├── Dashboard.jsx            # Optional: combined overview
+│   └── Settings.jsx             # Config editing and status
+├── store/                       # Central state (Zustand, Redux, etc.)
+│   ├── userInfoStore.js
+│   ├── configStore.js
+│   └── metricsStore.js
+├── utils/                       # Decoding, protobuf helpers, etc.
+├── validators/                  # adminMessageLogger and similar
+├── bridge/                      # Bridge server (can be split later)
+
+## Data categorization and structure
+
 Packets
 | Portnum | Application Name             | Data Type / Protobuf Message     | Description                                      |
 |---------|------------------------------|----------------------------------|--------------------------------------------------|
@@ -195,7 +303,7 @@ FromRadio {
 }
 ```
 
-PKI Encryption information
+### PKI Encryption information
 
 🔐 What This Packet Represents
 pkiEncrypted: true Indicates the payload was encrypted using public key infrastructure—likely destined for a specific node that can decrypt it with its private key.
@@ -261,7 +369,7 @@ MeshPacket {
 }
 ```
 
-Meta Data about the device
+### Meta Data about the device
 
 includes the device name represented as a number
 
@@ -309,8 +417,6 @@ Diagnostic Overlay: Compare excludedModules, firmwareVersion, and file sizes acr
 
 UI Gatekeeper: Use DeviceMetadata and ModuleConfig to conditionally render UI components.
 
-If you want, I can help scaffold the ingestion router next—something like:
-
 ```js
 function routeFromRadioPacket(packet: FromRadio) {
   if (packet.config) handleConfig(packet);
@@ -323,7 +429,7 @@ function routeFromRadioPacket(packet: FromRadio) {
 }
 ```
 
-Schema and tables
+## Schema and tables
 
 a proposed schema that ties together:
 
@@ -337,7 +443,10 @@ Channels as mesh topology
 
 Config and ModuleConfig as subsystem declarations
 
-🧩 Proposed Relational Schema
+![Schema diagram](./entity-diagram.png)
+
+
+### 🧩 Proposed Relational Schema
 🟦 nodes
 Stores persistent identity and inferred metadata.
 
@@ -422,7 +531,7 @@ CREATE TABLE module_config (
 );
 ```
 
-🧠 Optional Extensions
+#### 🧠 Optional Extensions
 file_registry: for FileInfo packets
 
 config_sessions: for tracking configCompleteId boundaries
@@ -603,4 +712,79 @@ Here’s how these tables map to future endpoints:
 | Domain       | Endpoint                  | Backed By         |
 |--------------|---------------------------|-------------------|
 | user_info    | `/user/messages`          | `messages`        |
-| metrics      | `/metrics/device/:nod
+| metrics      | `/metrics/device/:node
+
+
+## 🔌 WebSocket Emission for device_metrics
+
+This allows the bridge server to push telemetry updates to the UI in real time.
+
+1. Bridge Server Emission Hook
+```ts
+function emitDeviceMetrics(metrics: DeviceMetrics) {
+  const payload = {
+    type: 'device_metrics',
+    nodeId: metrics.nodeId,
+    connId: metrics.connId,
+    timestamp: metrics.timestamp,
+    battery: metrics.batteryLevel,
+    voltage: metrics.voltage,
+    gps: {
+      lat: metrics.gpsLat,
+      lon: metrics.gpsLon,
+      alt: metrics.altitude
+    },
+    uptime: metrics.uptime,
+    airtimeUsed: metrics.airtimeUsed
+  };
+
+  websocketServer.broadcastToUI(payload);
+}
+```
+
+Emitted whenever a telemetry packet is decoded.
+
+Tagged with connId and nodeId for stream multiplexing.
+
+2. UI Listener
+```ts
+socket.on('device_metrics', (data) => {
+  updateTelemetryOverlay(data.nodeId, data);
+});
+```
+
+Updates per-node telemetry panel.
+
+Can trigger alerts (e.g. low battery, GPS drift).
+
+🖥️ UI Visualization Concepts
+📨 Message Flow Overlay
+Render chat bubbles or timeline view per node.
+
+Show sender/receiver, timestamp, encryption status.
+
+Highlight unacknowledged or dropped messages.
+
+📡 Telemetry Panel
+Battery gauge, GPS map pin, uptime counter.
+
+Altitude graph or airtime usage bar.
+
+Optional “last updated” timestamp for staleness detection.
+
+🔔 Alert System
+Low battery warning (<20%)
+
+GPS drift detection (based on movement thresholds)
+
+Uptime reset (node rebooted)
+
+🧠 Bonus: Multiplexing Strategy
+To support multiple UI clients:
+
+Tag each WebSocket message with connId and nodeId
+
+Allow clients to subscribe to specific nodes or metrics
+
+Use a central event emitter in the bridge server to route decoded packets to both DB and WebSocket
+
