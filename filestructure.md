@@ -1,22 +1,17 @@
 ﻿# Project File Structure
 
-│—— bridge
-│  │—— bufferUtils.js
-│  │—— main.js
-│  │—— meshBridge.js
-│  │—— mqttBridge.js
-│  │—— packetDecoders.js
-│  │—— tcpHandler.js
-│  │—— websocketHandler.js
-│  ╵—— wsServer.js
-│—— disabled
-│  │—— useFlowControl.js
-│  │—— useMeshBridge.js.disabled
-│  │—— useMeshLifeCycle.js
-│  │—— useMeshMessages.js.disabled
-│  │—— useMeshWebSocket.js.disabled
-│  │—— useNodesList.js.disabled
-│  ╵—— useWebSocket.js.disabled
+│—— docs
+│  │—— achitecture.md
+│  │—— data driven architecture.md
+│  │—— enhanced_state_machine.md
+│  │—— entity-diagram.png
+│  │—— filestructure.md
+│  │—— implmenting-ack.md
+│  │—— latest-chat.txt
+│  │—— packets-architecture.md
+│  │—— packets.md
+│  │—— tagging-and-tracing-connections.md
+│  ╵—— websocket-tagging.md
 │—— env
 │  │—— .env
 │  │—— .env.local
@@ -132,28 +127,54 @@
 │  ╵—— make-json.ps1
 │—— public
 │  ╵—— vite.svg
+│—— scripts
+│  │—— buildSchema.js
+│  ╵—— testMQTTIngestion.js
 │—— src
+│  │—— api
 │  │—— assets
 │  │  │—— proto.json
 │  │  │—— proto.json.old
 │  │  │—— proto.json.txt
 │  │  ╵—— react.svg
+│  │—— bridge
+│  │  │—— api
+│  │  │  │—— handlers.js
+│  │  │  ╵—— routes.js
+│  │  │—— config
+│  │  │  ╵—— config.js
+│  │  │—— core
+│  │  │  │—— connectionManager.js
+│  │  │  │—— frameParser.js
+│  │  │  │—— fromRadioRouter.js
+│  │  │  │—— ingestionRouter.js
+│  │  │  │—— router.js
+│  │  │  │—— scheduleReconnect.js
+│  │  │  │—— schema.js
+│  │  │  │—— sessionRegistry.js
+│  │  │  ╵—— websocketEmitter.js
+│  │  │—— db
+│  │  │  │—— dbschema.js
+│  │  │  │—— insertMetrics.js
+│  │  │  │—— insertUserInfo.js
+│  │  │  ╵—— queryHandlers.js
+│  │  │—— handlers
+│  │  │  │—— mqttHandler.js
+│  │  │  │—— tcpHandler.js
+│  │  │  │—— tcpServerHandler.js
+│  │  │  │—— websocketHandler.js
+│  │  │  ╵—— websocketSessionHandler.js
+│  │  │—— packets
+│  │  │  │—— packetCatagorizer.js
+│  │  │  │—— packetDecoders.js
+│  │  │  │—— packetEnrich.js
+│  │  │  │—— packetIndex.js
+│  │  │  │—— packetLogger.js
+│  │  │  ╵—— packetUtils.js
+│  │  ╵—— routes
+│  │  │  ╵—— runtimeConfigRoutes.js
 │  │—— components
-│  │  │—— Mesh
-│  │  │  │—— MeshtasticClient.bkp
-│  │  │  │—— MeshtasticClient.jsx
-│  │  │  │—— MeshtasticConfig.jsx
-│  │  │  │—— NodeIdentity.jsx
-│  │  │  │—— NodeSelector.bkp
-│  │  │  ╵—— NodeSelector.jsx
-│  │  │—— Navigation
-│  │  │  │—— Menu.jsx
-│  │  │  │—— SideBar.jsx
-│  │  │  │—— SidebarTabs.jsx
-│  │  │  │—— TabContent.jsx
-│  │  │  │—— TopBar.jsx
-│  │  │  ╵—— TopToolbar.jsx
-│  │  │—— Settings
+│  │  │—— Config
 │  │  │  │—— GPSTelemetry.jsx
 │  │  │  │—— IdentityTab.jsx
 │  │  │  │—— LogAlerts.jsx
@@ -164,7 +185,15 @@
 │  │  │  │—— SettingsDrawer.bkp
 │  │  │  │—— SettingsDrawer.jsx
 │  │  │  ╵—— TelemetryTab.jsx
-│  │  ╵—— Tabs
+│  │  │—— Metrics
+│  │  │—— Navigation
+│  │  │  │—— Menu.jsx
+│  │  │  │—— SideBar.jsx
+│  │  │  │—— SidebarTabs.jsx
+│  │  │  │—— TabContent.jsx
+│  │  │  │—— TopBar.jsx
+│  │  │  ╵—— TopToolbar.jsx
+│  │  │—— Tabs
 │  │  │  │—— ChannelCard.jsx
 │  │  │  │—— Channels.jsx
 │  │  │  │—— ConnectionCard.jsx
@@ -179,7 +208,9 @@
 │  │  │  │—— NodeCard.jsx
 │  │  │  │—— NodeDetails.jsx
 │  │  │  │—— Nodes.jsx
+│  │  │  │—— NodeSelector.jsx
 │  │  │  ╵—— TestTab.jsx
+│  │  ╵—— UserInfo
 │  │—— hooks
 │  │  │—— diagnostics.js
 │  │  │—— useBridgeLifecycle.js
@@ -190,20 +221,12 @@
 │  │  │—— useSocketInterface.js
 │  │  │—— useStateTracker.js
 │  │  ╵—— useTCPNodes.js
-│  │—— Packets
-│  │  │—— packetCatagorizer.js
-│  │  │—— PacketDecoders.js
-│  │  ╵—— packetIndex.js
 │  │—— pages
 │  │  │—— ContactsPage.jsx
-│  │  │—— Home.jsx
 │  │  │—— HomePage.jsx
-│  │  │—— MessageListPage.jsx
-│  │  │—— NodesPage.jsx
-│  │  ╵—— NotFoundPage.jsx
+│  │  ╵—— MessageListPage.jsx
 │  │—— utils
 │  │  │—— bridgeAdapter.js
-│  │  │—— config.js
 │  │  │—— decodeFrame.js
 │  │  │—— decodeNodesResponse.js
 │  │  │—— eventUtils.js
@@ -230,27 +253,42 @@
 │  │—— reportWebVitals.js
 │  │—— setupTests.js
 │  ╵—— style.css
+│—— unused
+│  │—— deviceConfigRoutes.js
+│  │—— Home.jsx
+│  │—— MeshtasticClient.jsx
+│  │—— MeshtasticConfig.jsx
+│  │—— metricsRoutes.js
+│  │—— NodeIdentity.jsx
+│  │—— NodesPage.jsx
+│  │—— NotFoundPage.jsx
+│  │—— useFlowControl.js
+│  │—— useMeshBridge.js.disabled
+│  │—— useMeshLifeCycle.js
+│  │—— useMeshMessages.js.disabled
+│  │—— useMeshWebSocket.js.disabled
+│  │—— useNodesList.js.disabled
+│  │—— userInfoRouters.js
+│  ╵—— useWebSocket.js.disabled
 │—— .env
 │—— .env.local
 │—— .env.production
 │—— .gitattributes
 │—— .gitignore
-│—— achitecture.md
-│—— cat
+│—— ARCHITECTURE.md
 │—— config.yaml
-│—— enhanced_state_machine.md
+│—— CONTRIBUTING.md
+│—— DISCUSSIONS.md
 │—— filestructure.md
 │—— filestructure.ps1
-│—— implmenting-ack.md
 │—— index.html
+│—— LICENSE.md
 │—— meshmanager.code-workspace
+│—— meshmanager.db
 │—— package-lock.json
 │—— package.json
-│—— packets-architecture.md
-│—— packets.md
 │—— README.md
 │—— rewrite-imports.py
-│—— tagging-and-tracing-connections.md
+│—— server.js
 │—— vite.config.js
-│—— vite.config.js.new
-╵—— websocket-tagging.md
+╵—— vite.config.js.new

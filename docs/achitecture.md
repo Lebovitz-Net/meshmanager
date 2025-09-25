@@ -244,30 +244,3 @@ meshBridge is now a pure packet processor and router, not a session manager.
 It’s multi‑connection aware via connId.
 
 It’s stateless and loosely coupled to the transport layers.
-
-## Design Goals for the MQTT Bridge
-
-Multi‑connection aware
-
-Tag all packets with a sourceId (e.g., "mqtt") and possibly a connId if we later support multiple MQTT brokers or topics.
-
-Stateless packet processing
-
-Don’t assume processLocalPacket is single‑session; always pass sourceId so the mesh bridge can route correctly.
-
-Configurable broker/topic
-
-Allow broker URL and subscription topics to be passed in or loaded from config.
-
-Lifecycle resilience
-
-Handle reconnects, errors, and subscription re‑establishment.
-
-Symmetry with TCP handler
-
-Expose a clean API: connect(), publish(packet), disconnect().
-
-Logging clarity
-
-Prefix logs with [MQTT <sourceId>] for traceability.
-
