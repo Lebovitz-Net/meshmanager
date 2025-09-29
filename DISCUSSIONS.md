@@ -163,3 +163,63 @@ The ingestion pipeline (`ingestionRouter.js`) was updated to import from this un
 - Audit other parts of the codebase for direct imports from the old insert files and update them.
 - Consider adding transactions for high‑volume telemetry inserts to improve performance.
 - Document the insert function contracts in `CONTRIBUTING.md` for future contributors.
+
+### newe ingesting routing archiitecture
+
+🔗 Integration Steps
+Normalize MeshPacket decoding
+
+✅ You’ve got decodeMeshPacket returning { type, data, meta }.
+
+Ensure all portnums (1, 3, 4, 7, 67) are covered and return consistent shapes.
+
+Wire into dispatchSubPacket
+
+If subPacket.type === 'meshPacket', unwrap with decodeMeshPacket.
+
+Pass normalized { type, data, meta } into dispatchRegistry.
+
+Expand dispatchRegistry
+
+Map normalized types to handlers:
+
+message → insertMessage
+
+position → insertPosition
+
+nodeInfo → upsertNodeInfo
+
+telemetry → insertMetricsHandler
+
+adminMessage → (placeholder / ignore for now)
+
+Unify insertHandlers surface
+
+Ensure insertHandlers.js re‑exports everything, including insertMetricsHandler.
+
+That way, dispatch only ever imports from insertHandlers.
+
+Schema validation
+
+Run decoded payloads through schemaValidator.js before inserts.
+
+This catches malformed packets early and prevents DB corruption.
+
+Diagnostic logging
+
+Keep getKnownOneofs in dispatchSubPacket for unhandled oneofs.
+
+Add a similar log for unknown MeshPacket portnums.
+
+This gives you live coverage metrics while testing.
+
+End‑to‑end test
+
+Feed in a fixture for each portnum (1, 3, 4, 7, 67).
+
+Confirm: decode → dispatch → insert → DB row created.
+
+Log overlays/events to verify observability.
+
+📘 Suggested Next Move
+Start by wiring telemetry (port 67) through the full chain, since you already have insertMetricsHandler and all the group inserts. That’s the most complex path, and once it works, the others (message, position, nodeInfo) will feel straightforward.
