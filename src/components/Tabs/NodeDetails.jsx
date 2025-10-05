@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Typography, Collapse } from '@mui/material';
 import { useNodeSubscription } from '@/hooks/useNodeSubscription';
 import { useNodeDiagnostics } from '@/hooks/useNodeDiagnostics';
@@ -20,7 +20,7 @@ export default function NodeDetails({
   );
 
   const { latest: diagnosticPacket } = useNodeDiagnostics({
-    nodeNum: node.num,
+    nodeNum: node.nodeId,
     packet: messages[messages.length - 1]
   });
 
@@ -33,7 +33,7 @@ export default function NodeDetails({
   }, [expanded]);
 
   useNodeSubscription({
-    nodeId: node.nodeId ?? node.id,
+    nodeId: node.nodeId,
     status,
     active: debouncedActive,
     onPacket: packetHandler
@@ -43,106 +43,56 @@ export default function NodeDetails({
   const now = Date.now();
   const isStale = node.updated ? now - node.updated > 10000 : true;
 
-  const lat = node.position?.latitudeI ?? latest.position?.latitude;
-  const lon = node.position?.longitudeI ?? latest.position?.longitude;
-  const alt = node.position?.altitude ?? latest.position?.altitude;
+  const lat = node.position?.lat ?? latest.position?.latitude;
+  const lon = node.position?.lon ?? latest.position?.longitude;
+  const alt = node.position?.alt ?? latest.position?.altitude;
 
-  const longName = node.longName ?? node.user?.longName ?? '';
-  const shortName = node.shortName ?? node.user?.shortName ?? '';
-  const nodeId = node.nodeId ?? node.id ?? node.user?.id;
+  const longName = node.userLongName ?? node.longName ?? '';
+  const shortName = node.userShortName ?? node.shortName ?? '';
+  const nodeId = node.nodeId ?? node.id;
 
   return (
     <Box mt={2} p={2} border={1} borderRadius={2} borderColor="grey.300">
-      <Typography
-        variant="h6"
-        gutterBottom
-        sx={{ cursor: 'pointer' }}
-        onClick={onToggle}
-      >
-        {longName || shortName || nodeId || 'Unnamed Node'}
-      </Typography>
-
-      <Typography variant="body2">Node ID: {nodeId}</Typography>
-      {node.hwModel && (
-        <Typography variant="body2">Hardware Model: {node.hwModel}</Typography>
-      )}
-      {node.owner && (
-        <Typography variant="body2">Owner: {node.owner}</Typography>
-      )}
-      {node.source && (
-        <Typography variant="body2">Source: {node.source}</Typography>
-      )}
-      {node.packetType && (
-        <Typography variant="body2">Packet Type: {node.packetType}</Typography>
-      )}
-      {node.battery != null && (
-        <Typography variant="body2">Battery: {node.battery}%</Typography>
-      )}
-      {lat != null && lon != null && (
+      {/* Collapsed Summary */}
+      <Box onClick={onToggle} sx={{ cursor: 'pointer' }}>
+        <Typography variant="h6">
+          {shortName} {longName}
+        </Typography>
+        <Typography variant="body2">NodeNum: {nodeId}</Typography>
         <Typography variant="body2">
-          Location:{' '}
-          <a
-            href={`https://maps.google.com/?q=${lat},${lon}`}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            {lat.toFixed(5)}, {lon.toFixed(5)}
-          </a>
+          LastHeard: {new Date(node.lastHeard).toLocaleString()}
         </Typography>
-      )}
-      {alt != null && (
-        <Typography variant="body2">Altitude: {alt} m</Typography>
-      )}
-      <Typography variant="body2">Status: {status}</Typography>
-      {isStale && (
-        <Typography variant="body2" color="warning.main">
-          ⚠️ Node stale (no update in 10s)
-        </Typography>
-      )}
+        <Typography variant="body2">HopsAway: {node.hopsAway}</Typography>
+        <Typography variant="body2">Hardware Model: {node.userHwModel}</Typography>
+      </Box>
 
+      {/* Expanded Diagnostics */}
       <Collapse in={expanded} timeout="auto" unmountOnExit>
-        <Box mt={1}>
-            {diagnosticPacket ? (
+        <Box mt={2}>
+          {node.position?.lat ? (
+            <Typography variant="body2">
+              Position: {node.position.lat}, {node.position.lon}, Alt: {node.position.alt} @{' '}
+              {new Date(node.position.timestamp).toLocaleString()}
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No position data
+            </Typography>
+          )}
+          <Typography variant="body2">Public Key: {node.publicKey}</Typography>
+          <Typography variant="body2">
+            Messageable: {node.isUnmessagable === 0 ? 'Yes' : 'No'}
+          </Typography>
+
+          {/* Live diagnostics from subscription */}
+          {diagnosticPacket ? (
+            <Box mt={2}>
+              <Typography variant="body2">Live Diagnostic Packet:</Typography>
               <pre>{JSON.stringify(diagnosticPacket.packet, null, 2)}</pre>
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                No diagnostic data available.
-              </Typography>
-            )}
-          </Box>
-          <Box mt={1}>
-          {latest.position && (
-            <>
-              <Typography variant="body2">
-                Live Latitude: {latest.position.latitude}
-              </Typography>
-              <Typography variant="body2">
-                Live Longitude: {latest.position.longitude}
-              </Typography>
-              <Typography variant="body2">
-                Speed: {latest.position.speed} m/s
-              </Typography>
-              <Typography variant="body2">
-                Heading: {latest.position.heading}°
-              </Typography>
-              <Typography variant="body2">
-                DOP: {latest.position.dop}
-              </Typography>
-            </>
-          )}
-          {latest.battery != null && (
-            <Typography variant="body2">
-              Live Battery: {latest.battery}%
-            </Typography>
-          )}
-          {latest.certTrusted != null && (
-            <Typography variant="body2">
-              Cert Trust: {latest.certTrusted ? 'Trusted' : 'Unverified'}
-            </Typography>
-          )}
-          {latest.timestamp && (
-            <Typography variant="body2">
-              Last Update: {new Date(latest.timestamp).toLocaleString()}
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary" mt={2}>
+              No diagnostic data available.
             </Typography>
           )}
         </Box>

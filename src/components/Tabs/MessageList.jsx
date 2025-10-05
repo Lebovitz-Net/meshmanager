@@ -1,16 +1,25 @@
+// File: src/components/Tabs/MessageList.jsx
+
 import MessageCard from './MessageCard.jsx';
 
-export default function MessageList({ channelId }) {
-  const messages = [
-    { id: 'm1', text: 'Node Alpha reporting in.', sender: 'Node Alpha', channel: 'ch1', timestamp: '13:22' },
-    { id: 'm2', text: 'Node Bravo ready.', sender: 'Node Bravo', channel: 'ch2', timestamp: '13:23' },
-    { id: 'm3', text: 'Battery low on Node Alpha.', sender: 'Node Alpha', channel: 'ch1', timestamp: '13:24' },
-  ].filter(msg => msg.channel === channelId);
+export default function MessageList({ messages }) {
+  if (!messages || messages.length === 0) {
+    return null;
+  }
 
   return (
     <>
-      {messages.map(msg => (
-        <MessageCard key={msg.id} message={msg} />
+      {messages.map(m => (
+        <MessageCard
+          key={m.messageId}
+          message={{
+            id: m.messageId,
+            fromNodeNum: m.fromNodeNum,
+            text: m.message,            // ✅ map API "message" → prop "text"
+            timestamp: m.timestamp,
+            payload: m.message          // optional, fallback
+          }}
+        />
       ))}
     </>
   );

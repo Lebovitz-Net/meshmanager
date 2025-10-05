@@ -1,25 +1,60 @@
-// import useMeshMessages from '@/hooks/useMeshMessages';
+// File: src/components/Tabs/ContactsTab.jsx
 
-export default function ContactsRoute() {
-  const meshUrl = 'ws://192.168.2.1/api'; // or injected via props/context
-  // const { messages, status, sendMessage } = useMeshMessages({
-  //   url: meshUrl,
-  //   channelId: 'contacts', // optional—filter by channel if needed
-  //   dryRun: false,         // flip to true for onboarding
-  // });
+import { useState } from 'react';
+import { Box, Typography, CircularProgress, Button } from '@mui/material';
+import { useChannels } from '@/hooks/useChannels.js';
+import ContactsCard from '@/components/Tabs/ContactsCard.jsx';
+import ContactsDisplay from '@/components/Tabs/ContactsDisplay.jsx';
+
+export default function ContactsTab({ nodeNum }) {
+  const { channels, loading, error } = useChannels(nodeNum);
+  console.log('...ContactsTab', channels);
+
+  // store the full channel object instead of just the id
+  const [selectedChannel, setSelectedChannel] = useState(null);
+
+  if (!nodeNum) {
+    return (
+      <Box sx={{ padding: 2 }}>
+        <Typography variant="h6">No active nodeNum selected.</Typography>
+      </Box>
+    );
+  }
 
   return (
-    <div>Contacts tab</div>
-    // <section>
-    //   <h1>Mesh Contacts</h1>
-    //   <p>Connection Status: {status}</p>
-    //   <ul>
-    //     {messages.map((msg, i) => (
-    //       <li key={i}>
-    //         <strong>{msg.type}</strong>: {JSON.stringify(msg.payload)}
-    //       </li>
-    //     ))}
-    //   </ul>
-    // </section>
+    <Box sx={{ padding: 2 }}>
+      {!selectedChannel ? (
+        <>
+          <Typography variant="h5" gutterBottom>
+            Mesh Channels for Node {nodeNum}
+          </Typography>
+
+          {loading && <CircularProgress />}
+          {error && (
+            <Typography color="error" sx={{ mt: 2 }}>
+              Error loading channels: {error.message}
+            </Typography>
+          )}
+
+          {!loading &&
+            !error &&
+            channels.map(channel => (
+              <ContactsCard
+                key={channel.channel_num}
+                channel={channel}
+                isSelected={selectedChannel?.channel_num === channel.channel_num}
+                onSelectChannel={setSelectedChannel} // pass full channel object
+              />
+            ))}
+        </>
+      ) : (
+        <>
+          <Button variant="outlined" onClick={() => setSelectedChannel(null)}>
+            ← Back to Channels
+          </Button>
+          <ContactsDisplay channel={selectedChannel} />
+        </>
+      )}
+    </Box>
   );
 }
