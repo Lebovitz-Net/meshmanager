@@ -39,7 +39,6 @@ useEffect(() => {
       }
 
       const data = await response.json();
-      console.log('...useMessagesForChannel data from fetch', data);
 
       // Always normalize to an array
       setMessages(Array.isArray(data) ? data : []);

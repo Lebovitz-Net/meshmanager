@@ -34,7 +34,7 @@ export default function MessageCard({ message, isSelected, onSelect }) {
       >
         <div onClick={handleToggle} style={{ cursor: 'pointer', flex: 1 }}>
           <Typography variant="body2" color="text.secondary">
-            From: {message.fromNodeNum || message.sender}
+            From: {message.fromNodeNum || message.sender} To: {message.toNodeNum}
           </Typography>
           <Typography variant="body1" noWrap>
             {message.text || message.payload}

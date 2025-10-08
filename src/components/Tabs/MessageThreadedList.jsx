@@ -1,24 +1,20 @@
 // File: src/components/Tabs/ThreadedMessageList.js
 
-import MessageCard from './MessageCard.jsx';
+import MessageCard from './MessageCard';
 import { Typography } from '@mui/material';
 
-/**
- * ThreadedMessageList groups messages by messageId and displays them with indentation.
- * Messages are sorted by timestamp DESC, preserving backend order.
- * Replies in a thread are indented for visual clarity.
- */
-export default function ThreadedMessageList({ messages }) {
-  if (!messages || messages.length === 0) {
-    return null;
-  }
+// Groups messages by threadId (replyId or messageId).
+// Sorts threads by root timestamp DESC.
+// Flattens threads with `indented: true` for replies.
 
-  // Group messages by messageId
+function buildThreadedList (messages) {
+    // Group messages by messageId
   const threadMap = new Map();
   messages.forEach(m => {
-    const thread = threadMap.get(m.messageId) || [];
+    const threadId = m.replyId || m.messageId;
+    const thread = threadMap.get(threadId) || [];
     thread.push(m);
-    threadMap.set(m.messageId, thread);
+    threadMap.set(threadId, thread);
   });
 
   // Sort threads by first message timestamp DESC
@@ -32,21 +28,38 @@ export default function ThreadedMessageList({ messages }) {
     thread.forEach((m, index) => {
       threadedMessages.push({
         ...m,
-        indentLevel: index === 0 ? 0 : 1
+        idented: index >  0
       });
     });
   });
+  return threadedMessages;
+}
+
+export default function ThreadedMessageList({ messages, threaded }) {
+  if (!messages || messages.length === 0) {
+    return null;
+  }
+
+  const messageList = threaded
+      ? buildThreadedList(messages)
+      : messages
 
   return (
     <>
-      {threadedMessages.map(m => (
+      {messageList.map(m => (
       <div
         key={`${m.messageId}-${m.timestamp}`}
         style={{
-          marginLeft: m.indentLevel === 0 ? 0 : 32,
-          transition: 'margin 0.2s ease-in-out'
-        }}
-      >
+          marginLeft: m.indented ? 32 : 0,
+          borderLeft: m.indented ? '2px solid #ccc' : 'none',
+          paddingLeft: m.indented ? 8 : 0,
+          transition: 'all 0.2s ease-in-out'
+        }} >
+        {!m.indented && (
+          <Typography variant="caption" color="primary" sx={{ mb: 0.5 }}>
+            Root Message
+          </Typography>
+        )}
         <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
           Thread ID: {parseInt(m.messageId)}
         </Typography>
@@ -55,6 +68,7 @@ export default function ThreadedMessageList({ messages }) {
           message={{
             id: m.messageId,
             fromNodeNum: m.fromNodeNum,
+            toNodeNum: m.toNodeNum,
             text: m.message,
             timestamp: m.timestamp,
             payload: m.message

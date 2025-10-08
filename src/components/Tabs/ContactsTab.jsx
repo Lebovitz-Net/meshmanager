@@ -12,7 +12,6 @@ export default function ContactsTab({ nodeNum }) {
   const [selectedChannel, setSelectedChannel] = useState(null);
 
   const handleSendMessage = (text) => {
-    console.log('Sending message:', text);
     // TODO: Wire to backend or protocol bridge
   };
 
@@ -59,7 +58,7 @@ export default function ContactsTab({ nodeNum }) {
           </Box>
 
           <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-            <ContactsDisplay channel={selectedChannel} />
+            <ContactsDisplay channel={selectedChannel} contact={{toNodeNum: 4294967295, fromNodeNum: nodeNum}}/>
           </Box>
         </>
       )}

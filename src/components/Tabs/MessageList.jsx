@@ -15,6 +15,7 @@ export default function MessageList({ messages }) {
           message={{
             id: m.messageId,
             fromNodeNum: m.fromNodeNum,
+            toNodeNum: m.toNodeNum,
             text: m.message,            // ✅ map API "message" → prop "text"
             timestamp: m.timestamp,
             payload: m.message          // optional, fallback

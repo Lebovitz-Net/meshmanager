@@ -7,7 +7,6 @@ export function useChannels(nodeNum) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    console.log('...useChannel ', nodeNum);
     if (!nodeNum) return;
 
     async function fetchChannels() {

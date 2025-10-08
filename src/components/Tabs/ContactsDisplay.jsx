@@ -11,8 +11,9 @@ import { useState } from 'react';
 import MessageList from './MessageList';
 import MessageThreadedList from './MessageThreadedList';
 import { useMessagesForChannel } from '@/hooks/useMessagesForChannel';
+import { useSendMessage } from '@/hooks/useSendMessage';
 import MessageComposer from './MessageComposer';
-import { generateMeshPacketId } from '@/utils/packetUtils';
+
 
 export default function ContactsDisplay({ channel, contact }) {
   const { messages, loading, error } = useMessagesForChannel(
@@ -22,34 +23,10 @@ export default function ContactsDisplay({ channel, contact }) {
 
   const [threadedView, setThreadedView] = useState(true);
 
-  const handleSendMessage = async (text) => {
-    if (!text || !channel || !contact) return;
+  function handleSendMessage(text) {
 
-    const payload = {
-      messageId: generateMeshPacketId(),
-      channelNum: channel.channel_num ?? channel.id,
-      fromNodeNum: contact?.fromNodeNum ?? 123456, // fallback or session-derived
-      toNodeNum: contact?.nodeNum ?? null,
-      payload: text,
-    };
-
-    try {
-      const res = await fetch('/api/v1/sendMessage', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const error = await res.text();
-        throw new Error(`Server error: ${res.status} - ${error}`);
-      }
-
-      console.log('Message sent successfully');
-    } catch (err) {
-      console.error('Failed to send message:', err);
-    }
-  };
+    useSendMessage(text, channel, contact);
+  }
 
   if (!channel) {
     return (
@@ -106,9 +83,7 @@ export default function ContactsDisplay({ channel, contact }) {
         )}
 
         {!loading && !error && messages.length > 0 && (
-          threadedView
-            ? <MessageThreadedList messages={messages} />
-            : <MessageList messages={messages} />
+         <MessageThreadedList messages={messages} threaded={threadedView}/>
         )}
       </Box>
 
