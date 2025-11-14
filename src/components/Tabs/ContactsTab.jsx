@@ -1,19 +1,31 @@
 // File: src/components/Tabs/ContactsTab.jsx
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress, Button } from '@mui/material';
 import { useChannels } from '@/hooks/useChannels.js';
 import ContactsCard from '@/components/Tabs/ContactsCard.jsx';
 import ContactsDisplay from '@/components/Tabs/ContactsDisplay.jsx';
-import MessageComposer from '@/components/Tabs/MessageComposer.jsx';
+import useSSE from '@/hooks/useSSE.js';
+
+// Helper to upsert channel into array
+function upsertChannel(channels, incoming) {
+  const index = channels.findIndex(c => c.channel_num === incoming.channel_num);
+  if (index === -1) return [...channels, incoming];
+  const updated = [...channels];
+  updated[index] = { ...updated[index], ...incoming };
+  return updated;
+}
 
 export default function ContactsTab({ nodeNum }) {
-  const { channels, loading, error } = useChannels(nodeNum);
+  const { channels: initialChannels, loading, error } = useChannels(nodeNum);
   const [selectedChannel, setSelectedChannel] = useState(null);
+  const [liveChannels, setLiveChannels] = useState([]);
 
-  const handleSendMessage = (text) => {
-    // TODO: Wire to backend or protocol bridge
-  };
+  // 🔄 Listen for live channel updates via SSE
+  const handleChannels = useCallback((data) => {
+    setLiveChannels(prev => upsertChannel(prev, data.channel));
+  }, []);
+  useSSE('channel', handleChannels);
 
   if (!nodeNum) {
     return (
@@ -22,6 +34,13 @@ export default function ContactsTab({ nodeNum }) {
       </Typography>
     );
   }
+
+  // 🧱 Merge initial and live channels
+  const mergedChannels = [...initialChannels, ...liveChannels].reduce((acc, channel) => {
+    const existing = acc.find(c => c.channel_num === channel.channel_num);
+    if (!existing) return [...acc, channel];
+    return acc.map(c => c.channel_num === channel.channel_num ? { ...c, ...channel } : c);
+  }, []);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -40,7 +59,7 @@ export default function ContactsTab({ nodeNum }) {
 
           {!loading &&
             !error &&
-            channels.map(channel => (
+            mergedChannels.map(channel => (
               <ContactsCard
                 key={channel.channel_num}
                 channel={channel}
@@ -58,7 +77,22 @@ export default function ContactsTab({ nodeNum }) {
           </Box>
 
           <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
-            <ContactsDisplay channel={selectedChannel} contact={{toNodeNum: 4294967295, fromNodeNum: nodeNum}}/>
+            <ContactsDisplay
+              channel={selectedChannel}
+              contact={{
+                nodeNum,                // local node
+                toNodeNum: 4294967295,  // broadcast or peer
+                // enriched fields if available
+                shortName: selectedChannel.shortName,
+                longName: selectedChannel.longName,
+                userId: selectedChannel.userId,
+                macaddr: selectedChannel.macaddr,
+                hwModel: selectedChannel.hwModel,
+                publicKey: selectedChannel.publicKey,
+                isUnmessagable: selectedChannel.isUnmessagable,
+                updatedAt: selectedChannel.updatedAt
+              }}
+            />
           </Box>
         </>
       )}

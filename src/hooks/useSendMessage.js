@@ -3,13 +3,17 @@ import { generateMeshPacketId } from '@/utils/packetUtils';
   export const useSendMessage = async (text, channel, contact) => {
     if (!text || !channel || !contact) return;
 
-    const payload = {
+    const data = {
       messageId: generateMeshPacketId(),
       channelNum: channel.channel_num ?? channel.id,
-      fromNodeNum: contact?.fromNodeNum ?? 123456, // fallback or session-derived
+      fromNodeNum: contact?.nodeNum ?? null, // fallback or session-derived
       toNodeNum: contact?.toNodeNum ?? null,
-      payload: text,
+      message: text,
     };
+
+    if (data.fromNodeNum == null) {
+      console.warn('[useSendMessage] fromNodeNum is invalid', data);
+    }
 
     try {
       const res = await fetch(`http://localhost:8080/api/v1/sendMessage`, {
@@ -18,7 +22,7 @@ import { generateMeshPacketId } from '@/utils/packetUtils';
             'Content-Type': 'application/json',
             'Cache-Control': 'no-cache'
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(data),
       });
 
       if (!res.ok) {

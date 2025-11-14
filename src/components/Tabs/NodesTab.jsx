@@ -1,11 +1,22 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import NodeDetails from '@/components/Tabs/NodeDetails';
 import { Box, Typography, Button } from '@mui/material';
 import { useListNodes } from '@/hooks/useNodes.js';
+import useSSE from '@/hooks/useSSE.js';
+
+// Helper to upsert node into array
+function upsertNode(nodes, incoming) {
+  const index = nodes.findIndex(n => n.nodeNum === incoming.nodeNum);
+  if (index === -1) return [...nodes, incoming];
+  const updated = [...nodes];
+  updated[index] = { ...updated[index], ...incoming };
+  return updated;
+}
 
 export default function NodesTab({ useDummyData = false }) {
   const [expandedNodeId, setExpandedNodeId] = useState(null);
   const { nodes: rawNodes, loading, error, refetch } = useListNodes();
+  const [liveNodes, setLiveNodes] = useState([]);
 
   const handleToggle = (nodeId) => {
     setExpandedNodeId((prev) => (prev === nodeId ? null : nodeId));
@@ -13,13 +24,26 @@ export default function NodesTab({ useDummyData = false }) {
 
   const refresh = () => refetch();
 
+  // 🔄 Listen for live node updates via SSE
+  const handleNodes = useCallback((data) => {
+      setLiveNodes(prev => upsertNode(prev, data.node));
+  }, []);
+  useSSE('node', handleNodes);
+
   // 🧠 Dummy mode bypass
   if (useDummyData) {
     return <Typography>Dummy data mode active. Bridge disabled.</Typography>;
   }
 
-  // 🧱 Enrich raw node records
-  const nodes = rawNodes.map((node, idx) => ({
+  // 🧱 Merge raw and live nodes
+  const mergedNodes = [...rawNodes, ...liveNodes].reduce((acc, node) => {
+    const existing = acc.find(n => n.nodeNum === node.nodeNum);
+    if (!existing) return [...acc, node];
+    return acc.map(n => n.nodeNum === node.nodeNum ? { ...n, ...node } : n);
+  }, []);
+
+  // 🧱 Enrich merged node records
+  const nodes = mergedNodes.map((node, idx) => ({
     ...node,
     nodeId: node.nodeNum,
     id: node.userId ?? node.nodeNum,

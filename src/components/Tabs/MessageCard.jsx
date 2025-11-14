@@ -4,7 +4,8 @@ import {
   CardContent,
   Typography,
   Collapse,
-  IconButton
+  IconButton,
+  Stack
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MessageDetails from './MessageDetails.jsx';
@@ -13,6 +14,12 @@ export default function MessageCard({ message, isSelected, onSelect }) {
   const [expanded, setExpanded] = useState(false);
 
   const handleToggle = () => setExpanded(prev => !prev);
+
+  // Build display name with fallback
+  const displayName =
+    message.shortName || message.longName
+      ? `${message.shortName || ''} ${message.longName || ''}`.trim()
+      : `Meshtastic Node ${message.fromNodeNum}`;
 
   return (
     <Card
@@ -33,18 +40,36 @@ export default function MessageCard({ message, isSelected, onSelect }) {
         }}
       >
         <div onClick={handleToggle} style={{ cursor: 'pointer', flex: 1 }}>
-          <Typography variant="body2" color="text.secondary">
-            From: {message.fromNodeNum || message.sender} To: {message.toNodeNum}
+          {/* User identity block */}
+          <Stack spacing={0.3}>
+            <Typography variant="subtitle1" fontWeight="bold">
+              {displayName}
+            </Typography>
+            {message.userId && (
+              <Typography variant="caption" color="text.secondary">
+                User ID: {message.userId}
+              </Typography>
+            )}
+          </Stack>
+
+          {/* Message routing info */}
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            From: {message.fromNodeNum || message.sender} → To: {message.toNodeNum}
           </Typography>
+
+          {/* Message preview */}
           <Typography variant="body1" noWrap>
-            {message.text || message.payload}
+            {message.message || message.payload}
           </Typography>
+
+          {/* Timestamp */}
           <Typography variant="caption" color="text.secondary">
             {message.timestamp
               ? new Date(message.timestamp).toLocaleString()
               : ''}
           </Typography>
         </div>
+
         <IconButton
           onClick={handleToggle}
           sx={{
@@ -55,8 +80,10 @@ export default function MessageCard({ message, isSelected, onSelect }) {
           <ExpandMoreIcon />
         </IconButton>
       </CardContent>
+
       <Collapse in={expanded} timeout="auto" unmountOnExit>
         <CardContent>
+          {/* Pass full enriched message object down */}
           <MessageDetails message={message} />
         </CardContent>
       </Collapse>
